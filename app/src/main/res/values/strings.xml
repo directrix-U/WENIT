@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">쇼츠 감지 프로토타입</string>
-    <string name="app_subtitle">유튜브 쇼츠 재생 화면을 감지해 로컬 알림을 띄웁니다. (차단 없음)</string>
+    <string name="app_subtitle">유튜브 쇼츠(실험적으로 인스타그램 릴스) 재생 화면으로 추정되면 로컬 알림을 띄웁니다. (차단 없음, 감지는 추정입니다)</string>
 
     <string name="status_accessibility">접근성 서비스: %1$s</string>
     <string name="status_notification">알림 권한: %1$s</string>
@@ -23,11 +23,21 @@
     <string name="toast_permission_denied">알림 권한이 거부되어 알림을 띄울 수 없습니다.</string>
 
     <string name="channel_name">쇼츠 감지</string>
-    <string name="channel_description">유튜브 쇼츠 재생 화면이 감지되면 알려 줍니다.</string>
-    <string name="notification_title">쇼츠 감지됨</string>
-    <string name="notification_body">%1$d번째 감지 · 쇼츠 플레이어 화면 점유 %2$.1f%%</string>
+    <string name="channel_description">숏폼 재생 화면으로 추정되면 알려 줍니다.</string>
+    <string name="notification_title">숏폼 시청 추정</string>
+    <string name="notification_body">%1$d번째 감지 · %2$s · 신뢰도 %3$s</string>
+    <string name="app_label_youtube">YouTube Shorts</string>
+    <string name="app_label_instagram">Instagram Reels</string>
 
-    <string name="accessibility_service_description">유튜브 앱의 화면 구조를 읽어 쇼츠 재생 화면인지 판단하고, 감지되면 알림을 띄웁니다. 화면 내용을 저장하거나 외부로 전송하지 않습니다.</string>
+    <string name="accessibility_service_description">유튜브 앱(그리고 앱 화면에서 직접 켠 경우 인스타그램 앱)의 화면 구조(뷰 ID·크기·스크롤 이벤트)를 기기 안에서 읽어 숏폼 재생 화면인지 추정하고, 추정되면 알림을 띄웁니다. 화면의 글자·댓글·메시지 내용은 읽어 저장하지 않으며, 어떤 정보도 외부로 전송하지 않습니다.</string>
 
-    <string name="tuning_guide">감지 확인: adb logcat -s ShortsDetector 로 reel_watch_player 발견 여부 / 면적비 / 판정 결과를 확인하세요. 유튜브 업데이트로 ID 가 바뀌면 DetectionConfig.kt 의 상수를 교체하세요.</string>
+    <string name="tuning_guide">감지 확인: adb logcat -s ShortsDetector 로 상태 전이(예: CANDIDATE→SHORTFORM_ESTIMATED), 근거 코드, 면적비를 확인하세요. 유튜브 업데이트로 ID 가 바뀌면 detection/adapters/youtube/YouTubeViewIds.kt 를 확인하세요. 자세한 절차: docs/DEVICE_TEST_GUIDE.md</string>
+
+    <string name="section_targets">감지 대상 앱</string>
+    <string name="switch_youtube">YouTube Shorts</string>
+    <string name="switch_instagram">Instagram Reels (실험적 · 실기기 미검증)</string>
+    <string name="instagram_warning">인스타그램 감지 규칙은 아직 실제 기기에서 검증되지 않았습니다. 켜면 인스타그램 화면 구조(글자 제외)를 읽기 시작합니다.</string>
+    <string name="status_detection">현재 감지 상태: %1$s</string>
+    <string name="status_detection_detail">현재 감지 상태: %1$s (%2$s)</string>
+    <string name="status_detection_inactive">현재 감지 상태: 서비스가 꺼져 있어 감지하지 않습니다</string>
 </resources>

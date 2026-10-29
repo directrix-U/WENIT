@@ -16,17 +16,16 @@ package com.example.shortsdetector
  */
 object DetectionConfig {
 
-    /** 감시 대상 패키지. accessibility_service_config.xml 의 packageNames 와 동일해야 한다. */
-    const val TARGET_PACKAGE = "com.google.android.youtube"
-
-    /**
-     * 쇼츠 플레이어 뷰의 전체 리소스 ID. **전체 문자열 정확히 일치로만 비교한다.**
-     * (부분 일치 금지 — 예: "reel_time_bar" 는 일반 영상 화면에도 존재한다.)
+    /*
+     * 감시 대상 패키지와 쇼츠 플레이어 ID 는 앱별 어댑터로 옮겼다.
+     *  - YouTube: detection/adapters/youtube/YouTubeViewIds.kt  (reel_watch_player 등)
+     *  - Instagram: detection/adapters/instagram/InstagramReelsAdapter.kt
      *
+     * 뷰 ID 는 **전체 문자열 정확히 일치로만 비교한다.**
+     * (부분 일치 금지 — 예: "reel_time_bar" 는 일반 영상 화면에도 존재한다.)
      * accessibility_service_config.xml 에 flagReportViewIds 가 없으면 뷰 ID 가 null 로 와서
      * 검색이 동작하지 않는다.
      */
-    const val SHORTS_PLAYER_VIEW_ID = "com.google.android.youtube:id/reel_watch_player"
 
     /**
      * 쇼츠 플레이어 노드가 화면 면적의 이 비율 이상을 차지해야 "쇼츠 재생 중"으로 **새로 판정**한다.
@@ -78,4 +77,45 @@ object DetectionConfig {
      * 래치가 어떤 이유로 흔들리더라도 알림이 연달아 뜨는 것만은 막는 최후 방어선.
      */
     const val MIN_RENOTIFY_INTERVAL_MS = 30_000L
+
+    // --- 여기부터 리팩터링(yt-2)에서 추가한 값. 모두 TODO: VERIFY ON DEVICE ---
+
+    /**
+     * 이탈 신호(root 없음 / 다른 창 / 숏폼 신호 없음)가 이 시간 동안 이어져야 세션을 끝낸다.
+     *
+     * 기존에는 즉시 해제해서 홈 이동 후 약 1초 만에 알림이 지워졌다. 이제는 최대 약
+     * (EXIT_GRACE_MS + WATCHDOG_INTERVAL_MS) 걸리는 대신, 알림창을 잠깐 내리거나 root 가 순간적으로
+     * null 일 때 세션이 끊기지 않는다. TODO: VERIFY ON DEVICE
+     */
+    const val EXIT_GRACE_MS = 2_000L
+
+    /**
+     * 세션 유지에 필요한 최소 플레이어 면적비. 댓글창 실측 0.292 는 유지하고,
+     * 에뮬레이터에서 홈 버튼 후 관찰된 0.077(PiP/미니플레이어로 추정)은 유지하지 않는다. TODO: VERIFY ON DEVICE
+     */
+    const val MIN_HOLD_AREA_RATIO = 0.15f
+
+    /**
+     * 활성 창 root 가 화면의 이 비율보다 작으면 대상 앱의 대화상자/팝업으로 보고 "일시 가림" 처리한다.
+     * 에뮬레이터 로그인 대화상자 실측 약 0.09. TODO: VERIFY ON DEVICE
+     */
+    const val OVERLAY_MAX_ROOT_AREA_RATIO = 0.50f
+
+    /** reel_* 보조 컨테이너를 "전체화면"으로 볼 면적비. 덤프 실측 0.863. TODO: VERIFY ON DEVICE */
+    const val MIN_CONTAINER_AREA_RATIO = 0.70f
+
+    /** 관찰 간격 1회당 시청시간 누적 상한(타이머 1초 간격 + 여유). */
+    const val MAX_CREDIT_PER_STEP_MS = 3_000L
+
+    /** 세로 페이지 넘김 스크롤을 "최근"으로 볼 범위. TODO: VERIFY ON DEVICE */
+    const val PAGING_WINDOW_MS = 15_000L
+
+    /** 트리 순회 상한. 덤프 기준 쇼츠 화면은 약 130 노드. */
+    const val MAX_NODES_VISITED = 1_500
+
+    /** Instagram(실험적): pager 형 컨테이너로 볼 면적비. TODO: VERIFY ON DEVICE */
+    const val INSTAGRAM_PAGER_AREA_RATIO = 0.80f
+
+    /** Instagram(실험적): 새 진입에 필요한 최근 페이지 넘김 수. TODO: VERIFY ON DEVICE */
+    const val INSTAGRAM_MIN_PAGE_FLIPS = 2
 }

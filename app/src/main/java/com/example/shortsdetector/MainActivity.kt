@@ -11,12 +11,16 @@ import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import com.example.shortsdetector.data.DetectionPreferences
 import com.example.shortsdetector.databinding.ActivityMainBinding
+import com.example.shortsdetector.platform.DetectionStatus
 
 /**
  * 프로토타입용 최소 화면.
  *  - 접근성 서비스 활성화 상태 표시 + 설정 화면으로 이동
  *  - Android 13+ 알림 권한 요청
+ *  - 감지 대상 앱 선택(YouTube 기본 켜짐, Instagram 실험적·기본 꺼짐)
+ *  - 서비스가 연결된 경우에만 현재 감지 상태 표시
  */
 class MainActivity : AppCompatActivity() {
 
@@ -47,6 +51,16 @@ class MainActivity : AppCompatActivity() {
             requestNotificationPermissionIfNeeded()
         }
 
+        // 감지 대상 앱 선택. 서비스가 SharedPreferences 변경을 듣고 바로 반영한다.
+        binding.switchYouTube.isChecked = DetectionPreferences.isYouTubeEnabled(this)
+        binding.switchInstagram.isChecked = DetectionPreferences.isInstagramEnabled(this)
+        binding.switchYouTube.setOnCheckedChangeListener { _, checked ->
+            DetectionPreferences.setYouTubeEnabled(this, checked)
+        }
+        binding.switchInstagram.setOnCheckedChangeListener { _, checked ->
+            DetectionPreferences.setInstagramEnabled(this, checked)
+        }
+
         // 첫 실행이면 알림 권한을 미리 물어본다. 없으면 감지해도 알림이 안 뜬다.
         requestNotificationPermissionIfNeeded(silentIfGranted = true)
     }
@@ -70,6 +84,16 @@ class MainActivity : AppCompatActivity() {
             getString(if (notificationOn) R.string.state_granted else R.string.state_denied)
         )
         binding.buttonRequestNotification.isEnabled = !notificationOn
+
+        // 서비스가 실제로 연결돼 있을 때만 상태를 보여 준다. 꺼져 있는데 "작동 중"처럼 보이면 안 된다.
+        val status = DetectionStatus.current
+        binding.textDetectionStatus.text = when {
+            !accessibilityOn || !status.connected -> getString(R.string.status_detection_inactive)
+            status.reason != null ->
+                getString(R.string.status_detection_detail, status.state.name, status.reason.name)
+            else -> getString(R.string.status_detection, status.state.name)
+        }
+
         binding.textHint.text = when {
             !accessibilityOn -> getString(R.string.hint_enable_accessibility)
             !notificationOn -> getString(R.string.hint_enable_notification)

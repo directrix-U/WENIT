@@ -39,6 +39,13 @@
             android:textSize="16sp" />
 
         <TextView
+            android:id="@+id/textDetectionStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="16sp" />
+
+        <TextView
             android:id="@+id/textHint"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -58,6 +65,35 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
             android:text="@string/button_request_notification" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/section_targets"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchYouTube"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/switch_youtube" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchInstagram"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/switch_instagram" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/instagram_warning"
+            android:textSize="12sp" />
 
         <TextView
             android:layout_width="match_parent"
