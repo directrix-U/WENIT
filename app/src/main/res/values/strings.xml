@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">쇼츠 감지 프로토타입</string>
+    <string name="app_subtitle">유튜브 쇼츠 재생 화면을 감지해 로컬 알림을 띄웁니다. (차단 없음)</string>
+
+    <string name="status_accessibility">접근성 서비스: %1$s</string>
+    <string name="status_notification">알림 권한: %1$s</string>
+    <string name="state_on">켜짐</string>
+    <string name="state_off">꺼짐</string>
+    <string name="state_granted">허용됨</string>
+    <string name="state_denied">거부됨</string>
+
+    <string name="hint_enable_accessibility">아래 버튼으로 설정 > 접근성에서 \"쇼츠 감지 프로토타입\"을 켜 주세요.</string>
+    <string name="hint_enable_notification">알림 권한이 없으면 감지해도 알림이 표시되지 않습니다.</string>
+    <string name="hint_ready">준비 완료. 유튜브에서 쇼츠를 재생해 보세요.</string>
+
+    <string name="button_open_accessibility">접근성 설정 열기</string>
+    <string name="button_request_notification">알림 권한 요청</string>
+
+    <string name="toast_find_service">목록에서 \"쇼츠 감지 프로토타입\"을 찾아 켜 주세요.</string>
+    <string name="toast_settings_unavailable">접근성 설정 화면을 열 수 없습니다.</string>
+    <string name="toast_permission_granted">알림 권한이 허용되었습니다.</string>
+    <string name="toast_permission_denied">알림 권한이 거부되어 알림을 띄울 수 없습니다.</string>
+
+    <string name="channel_name">쇼츠 감지</string>
+    <string name="channel_description">유튜브 쇼츠 재생 화면이 감지되면 알려 줍니다.</string>
+    <string name="notification_title">쇼츠 감지됨</string>
+    <string name="notification_body">%1$d번째 감지 · 쇼츠 플레이어 화면 점유 %2$.1f%%</string>
+
+    <string name="accessibility_service_description">유튜브 앱의 화면 구조를 읽어 쇼츠 재생 화면인지 판단하고, 감지되면 알림을 띄웁니다. 화면 내용을 저장하거나 외부로 전송하지 않습니다.</string>
+
+    <string name="tuning_guide">감지 확인: adb logcat -s ShortsDetector 로 reel_watch_player 발견 여부 / 면적비 / 판정 결과를 확인하세요. 유튜브 업데이트로 ID 가 바뀌면 DetectionConfig.kt 의 상수를 교체하세요.</string>
+</resources>

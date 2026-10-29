@@ -1,0 +1,29 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# 모듈 빌드 산출물 (/build 는 루트만 제외하므로 app/build 등을 별도로 제외)
+build/
+.kotlin/
+
+# UI 덤프와 로그: 시청 기록·화면 원문이 들어갈 수 있으므로 커밋 금지.
+# 테스트에는 텍스트를 제거한 구조 fixture(app/src/test/resources/fixtures)만 쓴다.
+*_dump.xml
+window_dump.xml
+/dumps/
+*.log
+*.hprof
+logcat*.txt
+bugreport*.zip
+
+# 서명 키
+*.jks
+*.keystore
+keystore.properties
