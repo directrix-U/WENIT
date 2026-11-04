@@ -137,6 +137,7 @@ class MainActivity : AppCompatActivity() {
                 runIo {
                     UsageDatabase.get(this).deleteAll()
                     SavedTimeBaselinePreferences.clear(this)
+                    InterventionPolicyPreferences.markRecordsCleared(this)
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
                         Toast.makeText(this, R.string.toast_records_deleted, Toast.LENGTH_SHORT).show()
@@ -167,12 +168,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupInterventionSettings() {
         val current = InterventionPolicyPreferences.load(this).thresholdMs
-        DetectionConfig.WATCH_THRESHOLD_CHOICES_MS.forEachIndexed { i, ms ->
+        DetectionConfig.WATCH_THRESHOLD_CHOICES_MS.forEach { ms ->
             val label = ShortsNotifier.formatWatch(this, ms)
             val button = RadioButton(this).apply {
                 id = android.view.View.generateViewId()
-                // 첫 선택지(30초)는 기기 테스트용
-                text = if (i == 0) getString(R.string.threshold_test_suffix, label) else label
+                text = if (ms < DetectionConfig.TEST_THRESHOLD_BELOW_MS) {
+                    getString(R.string.threshold_test_suffix, label)
+                } else {
+                    label
+                }
                 isChecked = ms == current
                 setOnCheckedChangeListener { _, checked ->
                     if (checked) changeThreshold(ms)

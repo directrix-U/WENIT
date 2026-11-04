@@ -328,7 +328,7 @@ class InterventionFlowTest {
 
         val r = effective()
         assertTrue(r.demoMode)
-        assertEquals(30_000, r.thresholdMs)
+        assertEquals(10_000, r.thresholdMs)
         assertEquals(10_000, r.policy.cooldownMs)
         assertEquals(1, r.policy.escalateAfterSkips)
         assertEquals(7, r.policy.maxDailyInterventions)
@@ -343,7 +343,7 @@ class InterventionFlowTest {
 
         show(); val one = coordinator.respond(CONTINUED)!!
         assertEquals(2, one.nextLevel)
-        assertEquals(30_000L, one.reinterveneAfterWatchMs)
+        assertEquals(10_000L, one.reinterveneAfterWatchMs)
         show(); val two = coordinator.respond(CONTINUED)!!
         assertEquals(3, two.nextLevel)
         show(); val three = coordinator.respond(CONTINUED)!!
@@ -421,7 +421,7 @@ class InterventionFlowTest {
         assertEquals(before, change.previousPolicy)
         assertEquals(60_000, change.newPolicy.thresholdMs)
 
-        assertEquals(30_000, InterventionCoordinator.userThresholdChange(before, 1, "u", 5, "이유")!!.newPolicy.thresholdMs)
+        assertEquals(10_000, InterventionCoordinator.userThresholdChange(before, 1, "u", 5, "이유")!!.newPolicy.thresholdMs)
         assertNull(InterventionCoordinator.userThresholdChange(before, 180_000, "u", 5, "이유"))
     }
 
@@ -432,6 +432,6 @@ class InterventionFlowTest {
         ))
         assertEquals(420_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
         InterventionPolicyPreferences.writeDemoMode(prefs, true)
-        assertEquals(30_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
+        assertEquals(10_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
     }
 }

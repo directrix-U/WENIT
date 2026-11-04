@@ -26,6 +26,9 @@ object InterventionPolicyPreferences {
     private const val KEY_SKIP_STREAK = "skip_streak"
     private const val KEY_STOP_STREAK = "stop_streak"
     private const val KEY_DEMO_MODE = "demo_mode"
+
+    /** 값이 바뀌면 서비스가 하루 개입 카운터를 초기화한다. */
+    const val KEY_RECORDS_CLEARED_AT = "records_cleared_at"
     private const val KEY_DEMO_RUN_ID = "demo_run_id"
     private const val KEY_DEMO_LEVEL = "demo_level"
     private const val KEY_DEMO_SKIP_STREAK = "demo_skip_streak"
@@ -51,6 +54,12 @@ object InterventionPolicyPreferences {
     fun isDemoMode(context: Context): Boolean = prefs(context).getBoolean(KEY_DEMO_MODE, false)
 
     fun setDemoMode(context: Context, enabled: Boolean) = writeDemoMode(prefs(context), enabled)
+
+    /** 기록 전체 삭제를 서비스에 알린다. 어느 스레드에서 불러도 된다. */
+    fun markRecordsCleared(context: Context) = writeRecordsCleared(prefs(context), System.currentTimeMillis())
+
+    internal fun writeRecordsCleared(p: SharedPreferences, nowMs: Long) =
+        p.edit { putLong(KEY_RECORDS_CLEARED_AT, nowMs) }
 
     private fun migrate(context: Context) {
         migrateLegacyThreshold(prefs(context), DetectionPreferences.prefs(context))

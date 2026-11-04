@@ -59,7 +59,7 @@
     <string name="threshold_label">쇼츠를 이만큼 본 뒤에 알려요 (한 번 볼 때 기준, 댓글창 보는 시간 포함, 대화상자로 가린 시간 제외)</string>
     <string name="threshold_test_suffix">%1$s (테스트용)</string>
     <string name="switch_popup">화면 중앙 팝업으로 알리기 (끄면 상단 알림만)</string>
-    <string name="switch_demo_mode">시연 모드 (30초 기준, 빠른 단계 변화. 끄면 원래 정책으로 돌아가요)</string>
+    <string name="switch_demo_mode">시연 모드 (10초 기준, 빠른 단계 변화. 끄면 원래 정책으로 돌아가요)</string>
     <string name="status_policy">현재 개입 단계 Lv.%1$d · 기준 %2$s</string>
     <string name="status_policy_demo">시연 모드 · 현재 개입 단계 Lv.%1$d · 기준 %2$s</string>
     <string name="app_label_youtube">YouTube Shorts</string>

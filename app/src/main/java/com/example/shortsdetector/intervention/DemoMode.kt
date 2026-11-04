@@ -7,7 +7,7 @@ import com.example.shortsdetector.data.usage.InterventionOutcome
  * 쿨다운 10초는 하드 범위 밖이라 [InterventionPolicy.clamped] 를 지나지 않는다(시연 모드 전용 예외).
  */
 object DemoMode {
-    const val THRESHOLD_MS = 30_000L
+    const val THRESHOLD_MS = 10_000L
     const val COOLDOWN_MS = 10_000L
     const val ESCALATE_AFTER_SKIPS = 1
 

@@ -80,10 +80,13 @@ object DetectionConfig {
 
     /**
      * 개입(팝업/알림) 임계값 선택지와 기본값. 세션 하나 안의 확정 시청시간(댓글창 시간 포함, 대화상자 가림 시간 제외) 기준.
-     * 30초는 기기 테스트용. 기본 3분은 임시값이며 사용자 연구로 다시 정한다.
+     * 1분 미만은 기기 테스트용. 기본 3분은 임시값이며 사용자 연구로 다시 정한다.
      */
-    val WATCH_THRESHOLD_CHOICES_MS = longArrayOf(30_000L, 60_000L, 180_000L, 300_000L, 600_000L)
+    val WATCH_THRESHOLD_CHOICES_MS = longArrayOf(10_000L, 30_000L, 60_000L, 180_000L, 300_000L, 600_000L)
     const val DEFAULT_WATCH_THRESHOLD_MS = 180_000L
+
+    /** 이보다 짧은 임계값 선택지는 화면에 테스트용으로 표시한다. */
+    const val TEST_THRESHOLD_BELOW_MS = 60_000L
 
     // --- 여기부터 리팩터링(yt-2)에서 추가한 값. 모두 TODO: VERIFY ON DEVICE ---
 

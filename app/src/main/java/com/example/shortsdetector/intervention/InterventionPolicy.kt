@@ -60,8 +60,8 @@ object InterventionPolicyBounds {
     /** 정책의 최대 단계로 고를 수 있는 값 */
     val MAX_LEVEL_SETTING = 2..MAX_LEVEL
 
-    /** 하한은 기존 임계값 선택지의 최솟값(30초)과 같다. */
-    val THRESHOLD_MS = 30_000L..3_600_000L
+    /** 하한은 임계값 선택지의 최솟값(10초, 기기 테스트용)과 같다. */
+    val THRESHOLD_MS = 10_000L..3_600_000L
     val ESCALATE_AFTER_SKIPS = 1..10
     val DEESCALATE_AFTER_STOPS = 1..10
 

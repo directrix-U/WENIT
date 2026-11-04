@@ -309,6 +309,56 @@ class InterventionHardeningTest {
         assertNull(InterventionPolicyPreferences.resolve(prefs, emptyList()).demoRunId)
     }
 
+    @Test
+    fun `clearing records resets both daily counters`() {
+        val e = engine(maxDaily = 1)
+        e.seedDailyInterventions(1, 1)
+        assertEquals(1, e.session(0).count { it.suppressedByDailyLimit })
+
+        e.resetDailyInterventions()
+        assertEquals(1, e.session(60_000).count { it.notifySession != null })
+
+        e.resetDailyInterventions()
+        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
+        assertEquals(1, e.session(120_000).count { it.notifySession != null })
+    }
+
+    @Test
+    fun `records cleared mark changes on every delete and keeps the policy`() {
+        val prefs = FakeSharedPreferences()
+        InterventionPolicyPreferences.write(prefs, InterventionPolicy(thresholdMs = 60_000))
+        InterventionPolicyPreferences.writeRecordsCleared(prefs, 5)
+        assertEquals(5L, prefs.getLong(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT, 0))
+        InterventionPolicyPreferences.writeRecordsCleared(prefs, 6)
+        assertEquals(6L, prefs.getLong(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT, 0))
+        assertEquals(60_000, InterventionPolicyPreferences.read(prefs).thresholdMs)
+    }
+
+    // --- 10초 기준 ---
+
+    @Test
+    fun `ten seconds is a selectable threshold inside the hard bounds`() {
+        assertTrue(10_000L in com.example.shortsdetector.DetectionConfig.WATCH_THRESHOLD_CHOICES_MS)
+        assertEquals(10_000, InterventionPolicy(thresholdMs = 10_000).clamped().thresholdMs)
+        assertEquals(10_000, InterventionPolicy(thresholdMs = 1).clamped().thresholdMs)
+    }
+
+    @Test
+    fun `every threshold choice survives clamping unchanged`() {
+        for (ms in com.example.shortsdetector.DetectionConfig.WATCH_THRESHOLD_CHOICES_MS) {
+            assertEquals(ms, InterventionPolicy(thresholdMs = ms).clamped().thresholdMs)
+        }
+    }
+
+    @Test
+    fun `engine intervenes at ten seconds`() {
+        val e = engine()
+        e.applyPolicy(10_000, 1_000, 10)
+        e.enter(0)
+        val first = e.watch(1_000, 15_000).first { it.notifySession != null }
+        assertTrue(first.notifyWatchMs!! in 10_000..11_000)
+    }
+
     // --- 시연 기록 분리 ---
 
     private val zone = ZoneId.of("Asia/Seoul")

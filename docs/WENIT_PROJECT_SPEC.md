@@ -246,7 +246,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `level`: 현재 단계
 - `max_level`: 2 또는 3, 기본 3. 2 면 Lv.3 을 쓰지 않는다
 - `escalate_after_skips`, `deescalate_after_stops`, `cooldown_ms`, `max_daily_interventions`
-- 시연 모드 값은 저장값 위에 덧씌워 계산만 하고 저장하지 않는다. 하루 상한도 시연 전용 카운터를 쓰고 시연 모드를 켤 때 초기화한다
+- 시연 모드(기준 10초, 쿨다운 10초, 상승 기준 1회) 값은 저장값 위에 덧씌워 계산만 하고 저장하지 않는다. 하루 상한도 시연 전용 카운터를 쓰고 시연 모드를 켤 때 초기화한다
 
 ### `UserProfile`
 - 나이대, 성별(기본 응답 안 함), 주로 보는 숏폼·시간대·요일, 평소 하루 시청 시간, AI 추천 사용 동의(기본 false)

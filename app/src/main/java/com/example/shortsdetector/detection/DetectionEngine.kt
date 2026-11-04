@@ -92,6 +92,12 @@ class DetectionEngine(
         demoLimit.seed(currentDay(), demoCount)
     }
 
+    /** 기록을 전부 지웠을 때. 다음 개입부터 0 부터 다시 센다. */
+    fun resetDailyInterventions() {
+        dailyLimit.reset()
+        demoLimit.reset()
+    }
+
     /** 켜진 동안 열린 세션의 시간을 시청시간이 아니라 가린 시간으로 센다. */
     fun setWatchHold(hold: Boolean) = machine.setWatchHold(hold)
 

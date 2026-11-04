@@ -111,7 +111,14 @@ class ShortsDetectionService : AccessibilityService() {
     }
 
     /** 정책·시연 모드·목표가 바뀌면 다음 판정부터 반영한다. */
-    private val policyListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> applyPolicy() }
+    private val policyListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT) {
+            engine.resetDailyInterventions()
+            Log.i(TAG, "기록 삭제: 하루 개입 수 초기화")
+        } else {
+            applyPolicy()
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
