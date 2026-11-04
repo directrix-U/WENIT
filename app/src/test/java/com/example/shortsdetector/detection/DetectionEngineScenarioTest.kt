@@ -31,10 +31,12 @@ class DetectionEngineScenarioTest {
 
     private val tuning = DetectionTuning()
 
-    private fun engine(packages: Set<String> = setOf(YT, IG)) = DetectionEngine(
+    /** 기본 임계값 0 = 세션 시작 즉시 개입(기존 동작). 아래 기존 회귀 시나리오는 이 값으로 그대로 돈다. */
+    private fun engine(packages: Set<String> = setOf(YT, IG), thresholdMs: Long = 0L) = DetectionEngine(
         tuning,
         listOf(YouTubeShortsAdapter(tuning), InstagramReelsAdapter(tuning)),
-        DetectionConfig.MIN_RENOTIFY_INTERVAL_MS
+        DetectionConfig.MIN_RENOTIFY_INTERVAL_MS,
+        thresholdMs
     ).also { it.setEnabledPackages(packages, 0) }
 
     /** 알림을 실제로 띄운 것처럼 처리하고 결과를 돌려준다(서비스의 handleOutput 과 같은 순서). */
@@ -146,13 +148,66 @@ class DetectionEngineScenarioTest {
         e.enterShorts(0)
         e.onRootUnavailable(1_000); e.onRootUnavailable(2_000); e.onRootUnavailable(3_000)
         assertEquals(DetectionState.ENDED, e.state)
-        val again = e.enterShorts(5_000)
+        // 세션 이어 가기 유예(10초)는 넘기고 쿨다운(30초) 안에 재진입
+        val again = e.enterShorts(15_000)
         assertEquals(2, again.step.startedSession)
         assertTrue(again.suppressedByCooldown)
         assertNull(again.notifySession)
         // 쿨다운이 지난 뒤에는 다시 알린다
-        e.onRootUnavailable(6_000); e.onRootUnavailable(7_000); e.onRootUnavailable(8_000)
+        e.onRootUnavailable(16_000); e.onRootUnavailable(17_000); e.onRootUnavailable(18_000)
         assertEquals(3, e.enterShorts(40_000).notifySession)
+    }
+
+    @Test
+    fun `re-entering within the resume window continues the same session without re-notifying`() {
+        val e = engine()
+        assertEquals(1, e.enterShorts(0).notifySession)
+        e.onRootUnavailable(1_000); e.onRootUnavailable(2_000)
+        assertTrue(e.onRootUnavailable(3_000).cancelNotification)
+        val again = e.enterShorts(5_000)
+        assertNull(again.step.startedSession)
+        assertEquals(1, again.step.resumedSession)
+        assertNull(again.notifySession)
+        assertFalse(again.suppressedByCooldown)   // 이미 판정한 세션이라 다시 판정하지 않는다
+    }
+
+    @Test
+    fun `threshold - short blank screen between shorts does not reset watch time (emulator 2s gap)`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        assertNull(e.watchUntilNotified(1_500, 15_500))
+        // 2초 넘게 숏폼 신호 없음 → 세션 종료, 곧바로 재진입
+        var ended = false
+        for (t in 16_000L..19_000L step 1_000L) {
+            if (e.frame(t, Fixtures.youtubeHome()).endedSession != null) ended = true
+        }
+        assertTrue(ended)
+        val back = e.enterShorts(19_500)
+        assertEquals(1, back.step.resumedSession)
+        // 끊기기 전 약 15.5초 + 이후 약 14.5초 → 세션 시작 기준 약 34초 근처에서 개입(끊긴 3.5초는 안 셈)
+        val hit = e.watchUntilNotified(21_000, 60_000)
+        assertNotNull(hit)
+        assertEquals(1, hit!!.second.notifySession)
+        assertTrue("notified at ${hit.first}", hit.first in 33_000L..36_000L)
+    }
+
+    @Test
+    fun `comments sheet fully expanded keeps the session and counts toward the threshold`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        e.frame(1_500, Fixtures.youtubeShortsCommentsOpen())
+        var hit: Long? = null
+        for (t in 2_500L..60_000L step 1_000L) {
+            val s = if (t % 2_000L == 500L) Fixtures.youtubeShortsCommentsExpanded(playerBottom = 145)
+            else Fixtures.youtubeShortsCommentsExpanded()
+            val out = e.frame(t, s)
+            assertFalse("ended at $t", out.cancelNotification)
+            assertEquals(DetectionState.TEMPORARILY_OBSCURED, e.state)
+            if (out.notifySession != null && hit == null) hit = t
+        }
+        assertNotNull(hit)
+        assertTrue("notified at $hit", hit!! in 30_500L..32_500L)
+        assertEquals(DetectionState.SHORTFORM_ESTIMATED, e.frame(61_000, Fixtures.youtubeShorts()).step.current)
     }
 
     @Test
@@ -289,5 +344,116 @@ class DetectionEngineScenarioTest {
         val out = e.forceEnd(1_000)
         assertTrue(out.cancelNotification)
         assertFalse(e.forceEnd(1_100).cancelNotification)
+    }
+
+    // --- 개입 임계값: "어느 정도 본 뒤에" 알린다 ---
+
+    /** 세션 진입 후 1초 간격(타이머)으로 [frame] 을 돌리고, 개입이 나온 시각과 결과를 돌려준다. */
+    private fun DetectionEngine.watchUntilNotified(
+        from: Long, until: Long, s: () -> ScreenSnapshot = { Fixtures.youtubeShorts() }
+    ): Pair<Long, EngineOutput>? {
+        for (t in from..until step 1_000L) {
+            val out = frame(t, s())
+            if (out.notifySession != null) return t to out
+        }
+        return null
+    }
+
+    @Test
+    fun `threshold - no popup at session start, one popup after watching long enough`() {
+        val e = engine(thresholdMs = 60_000)
+        val start = e.enterShorts(0)
+        assertEquals(1, start.step.startedSession)
+        assertNull(start.notifySession)
+        assertFalse(start.suppressedByCooldown)
+
+        val hit = e.watchUntilNotified(1_500, 120_000)
+        assertNotNull(hit)
+        val (t, out) = hit!!
+        assertEquals(1, out.notifySession)
+        assertTrue(out.notifyWatchMs!! >= 60_000)
+        // 세션 시작(500ms) 기준 60초 근처, 타이머 1회 오차 이내
+        assertTrue("notified at $t", t in 60_500L..62_500L)
+        // 계속 봐도 같은 세션에서 다시 뜨지 않는다
+        assertNull(e.watchUntilNotified(t + 1_000, t + 300_000))
+    }
+
+    @Test
+    fun `threshold - leaving before the threshold never notifies`() {
+        val e = engine(thresholdMs = 60_000)
+        e.enterShorts(0)
+        assertNull(e.watchUntilNotified(1_500, 30_500))
+        e.onRootUnavailable(31_000); e.onRootUnavailable(32_000)
+        val end = e.onRootUnavailable(33_000)
+        assertNotNull(end.endedSession)
+        assertNull(end.notifySession)
+    }
+
+    @Test
+    fun `threshold - time with comments open is counted`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        // 20초 시청 → 댓글창을 연 채로 계속 → 댓글창 안에서 임계값 도달
+        assertNull(e.watchUntilNotified(1_500, 20_500))
+        val hit = e.watchUntilNotified(21_500, 81_500) { Fixtures.youtubeShortsCommentsOpen() }
+        assertNotNull(hit)
+        assertTrue("notified at ${hit!!.first}", hit.first in 30_500L..32_500L)
+        assertEquals(DetectionState.TEMPORARILY_OBSCURED, e.state)
+    }
+
+    @Test
+    fun `threshold - time with a dialog window over shorts is not counted`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        // 20초 시청 → 대화상자 60초 → 다시 시청
+        assertNull(e.watchUntilNotified(1_500, 20_500))
+        assertNull(e.watchUntilNotified(21_500, 81_500) { Fixtures.youtubeDialogWindow() })
+        val hit = e.watchUntilNotified(82_500, 120_000)
+        assertNotNull(hit)
+        assertTrue("notified at ${hit!!.first}", hit.first in 90_000L..95_000L)
+    }
+
+    @Test
+    fun `threshold - each new session needs its own watch time`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        assertNotNull(e.watchUntilNotified(1_500, 40_000))
+        e.onRootUnavailable(41_000); e.onRootUnavailable(42_000); e.onRootUnavailable(43_000)
+        assertEquals(DetectionState.ENDED, e.state)
+
+        // 이어 가기 유예(10초)를 넘긴 재진입은 새 세션
+        val again = e.enterShorts(60_000)
+        assertEquals(2, again.step.startedSession)
+        assertNull(again.notifySession)
+        val hit = e.watchUntilNotified(61_500, 110_000)
+        assertEquals(2, hit!!.second.notifySession)
+    }
+
+    @Test
+    fun `threshold - exit grace blip keeps the session and its watch time`() {
+        val e = engine(thresholdMs = 30_000)
+        e.enterShorts(0)
+        assertNull(e.watchUntilNotified(1_500, 20_500))
+        // 알림창을 1초 내렸다 올림 → 같은 세션 유지
+        e.onRootUnavailable(21_500)
+        val hit = e.watchUntilNotified(22_500, 60_000)
+        assertEquals(1, hit!!.second.notifySession)
+    }
+
+    @Test
+    fun `threshold - popup and notification both failed does not arm cooldown`() {
+        val e = engine(thresholdMs = 10_000)
+        e.onSnapshot(0, Fixtures.youtubeShorts()); e.onSnapshot(250, Fixtures.youtubeShorts())
+        e.onSnapshot(500, Fixtures.youtubeShorts())
+        var first: Int? = null
+        for (t in 1_500L..20_000L step 1_000L) first = first ?: e.onSnapshot(t, Fixtures.youtubeShorts()).notifySession
+        assertEquals(1, first)
+        e.forceEnd(21_000)
+        e.onSnapshot(21_100, Fixtures.youtubeShorts()); e.onSnapshot(21_350, Fixtures.youtubeShorts())
+        e.onSnapshot(21_600, Fixtures.youtubeShorts())
+        var second: Int? = null
+        for (t in 22_600L..40_000L step 1_000L) second = second ?: e.onSnapshot(t, Fixtures.youtubeShorts()).notifySession
+        // 쿨다운(30초) 안이지만 이전 개입이 실제로 표시되지 않았으므로 다시 시도한다
+        assertEquals(2, second)
     }
 }

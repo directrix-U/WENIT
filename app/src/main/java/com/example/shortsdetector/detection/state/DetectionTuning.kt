@@ -24,10 +24,17 @@ data class DetectionTuning(
     val minContainerAreaRatio: Float = DetectionConfig.MIN_CONTAINER_AREA_RATIO,
     /** 이탈 신호 후 세션을 끝내기까지 기다리는 시간. TODO: VERIFY ON DEVICE */
     val exitGraceMs: Long = DetectionConfig.EXIT_GRACE_MS,
+    /** 이탈 종료 뒤 이 시간 안에 같은 앱에서 재진입하면 같은 세션으로 이어 간다. 0 이면 끔. TODO: VERIFY ON DEVICE */
+    val sessionResumeWindowMs: Long = DetectionConfig.SESSION_RESUME_WINDOW_MS,
     /** 관찰 공백이 이보다 길면 세션을 끝낸다 (기존 STATE_STALE_MS) */
     val staleMs: Long = DetectionConfig.STATE_STALE_MS,
     /** 관찰 간격 1회당 시간 누적 상한. 공백 시간을 시청시간으로 부풀리지 않기 위함 */
     val maxCreditPerStepMs: Long = DetectionConfig.MAX_CREDIT_PER_STEP_MS,
+    /**
+     * 댓글/설명 패널로 줄어든 플레이어(SHORTFORM_PARTIAL) 시간을 확정 시청시간에 넣을지.
+     * 패널이 열려 있어도 영상은 계속 재생·표시되므로 기본은 넣는다. 대화상자(OVERLAY)는 여기에 해당하지 않는다.
+     */
+    val countPartialAsWatch: Boolean = true,
     /** 세로 페이지 전환 신호를 "최근"으로 볼 범위. TODO: VERIFY ON DEVICE */
     val pagingWindowMs: Long = DetectionConfig.PAGING_WINDOW_MS,
     /** Instagram: 세로 pager 로 볼 컨테이너 면적비. TODO: VERIFY ON DEVICE */

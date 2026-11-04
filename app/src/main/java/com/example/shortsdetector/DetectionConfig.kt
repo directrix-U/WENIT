@@ -78,6 +78,13 @@ object DetectionConfig {
      */
     const val MIN_RENOTIFY_INTERVAL_MS = 30_000L
 
+    /**
+     * 개입(팝업/알림) 임계값 선택지와 기본값. 세션 하나 안의 확정 시청시간(댓글창 시간 포함, 대화상자 가림 시간 제외) 기준.
+     * 30초는 기기 테스트용. 기본 3분은 임시값이며 사용자 연구로 다시 정한다.
+     */
+    val WATCH_THRESHOLD_CHOICES_MS = longArrayOf(30_000L, 60_000L, 180_000L, 300_000L, 600_000L)
+    const val DEFAULT_WATCH_THRESHOLD_MS = 180_000L
+
     // --- 여기부터 리팩터링(yt-2)에서 추가한 값. 모두 TODO: VERIFY ON DEVICE ---
 
     /**
@@ -88,6 +95,19 @@ object DetectionConfig {
      * null 일 때 세션이 끊기지 않는다. TODO: VERIFY ON DEVICE
      */
     const val EXIT_GRACE_MS = 2_000L
+
+    /**
+     * 세션이 이탈로 끝난 뒤 이 시간 안에 같은 앱에서 다시 진입하면 같은 세션으로 이어 간다
+     * (시청시간·세션 번호·개입 여부 유지, 끊긴 구간 시간은 세지 않음). 에뮬레이터에서 2초짜리
+     * 빈 화면 뒤 세션이 새로 시작돼 개입이 늦어진 것을 막기 위함. TODO: VERIFY ON DEVICE
+     */
+    const val SESSION_RESUME_WINDOW_MS = 10_000L
+
+    /**
+     * 사용 기록(세션·개입) 보관 기간. 서비스가 연결될 때 이보다 오래된 기록을 지운다.
+     * 임시값 — 사용자 설정은 통계 화면 단계에서 추가한다. 사용자는 언제든 전체 삭제할 수 있다.
+     */
+    const val USAGE_RETENTION_DAYS = 90L
 
     /**
      * 세션 유지에 필요한 최소 플레이어 면적비. 댓글창 실측 0.292 는 유지하고,

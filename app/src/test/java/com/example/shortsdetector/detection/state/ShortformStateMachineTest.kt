@@ -100,17 +100,113 @@ class ShortformStateMachineTest {
         assertNull(back.startedSession)
     }
 
+    private fun overlay(t: Long) = target(t, VerdictKind.OVERLAY, Confidence.LOW)
+
     @Test
-    fun `obscured time is tracked separately from estimated watch time`() {
+    fun `comment sheet time counts as watch time`() {
         val m = estimated()                          // 2_000
         m.onObservation(shorts(4_000))               // +2_000 watch
         m.onObservation(partial(5_000))              // +1_000 watch
-        m.onObservation(partial(7_000))              // +2_000 obscured
-        m.onObservation(shorts(8_000))               // +1_000 obscured
-        val end = m.forceEnd(9_000)!!
-        assertEquals(3_000, end.estimatedWatchMs)
-        assertEquals(3_000, end.obscuredMs)
+        m.onObservation(partial(7_000))              // +2_000 watch (댓글창)
+        m.onObservation(shorts(8_000))               // +1_000 watch (댓글창)
+        assertEquals(6_000, m.sessionWatchMs)
+        val end = m.forceEnd(9_000)!!                // forceEnd 는 시간을 누적하지 않음
+        assertEquals(6_000, end.estimatedWatchMs)
+        assertEquals(3_000, end.partialWatchMs)
+        assertEquals(0, end.obscuredMs)
         assertEquals(0, end.uncertainMs)
+    }
+
+    @Test
+    fun `dialog overlay time is still excluded from watch time`() {
+        val m = estimated()                          // 2_000
+        m.onObservation(shorts(4_000))               // +2_000 watch
+        m.onObservation(overlay(5_000))              // +1_000 watch
+        m.onObservation(overlay(7_000))              // +2_000 obscured
+        m.onObservation(partial(8_000))              // +1_000 obscured
+        m.onObservation(shorts(9_000))               // +1_000 watch (댓글창)
+        val end = m.forceEnd(9_000)!!
+        assertEquals(4_000, end.estimatedWatchMs)
+        assertEquals(1_000, end.partialWatchMs)
+        assertEquals(3_000, end.obscuredMs)
+    }
+
+    /** 세션 1 을 열고 [watchUntil] 까지 본 뒤 grace 를 넘겨 이탈 종료시킨다. 종료 시각을 돌려준다. */
+    private fun ShortformStateMachine.watchThenLeave(watchUntil: Long): Long {
+        onObservation(shorts(watchUntil))
+        onObservation(Observation.unavailable(watchUntil + 1_000))
+        onObservation(Observation.unavailable(watchUntil + 2_000))
+        val end = onObservation(Observation.unavailable(watchUntil + 3_000))
+        assertNotNull(end.endedSession)
+        return watchUntil + 3_000
+    }
+
+    private fun ShortformStateMachine.reenter(from: Long, pkg: String = YT): Step {
+        onObservation(shorts(from, pkg = pkg)); onObservation(shorts(from + 250, pkg = pkg))
+        return onObservation(shorts(from + 500, pkg = pkg))
+    }
+
+    @Test
+    fun `re-entry within resume window continues the same session and its watch time`() {
+        val m = estimated()                               // 2_000
+        val endedAt = m.watchThenLeave(5_000)             // watch 3_000 + 1_000(→EXIT_PENDING)
+        val watchBefore = 4_000L
+        val s = m.reenter(endedAt + 5_000)
+        assertNull(s.startedSession)
+        assertEquals(1, s.resumedSession)
+        assertEquals(1, m.sessionNumber)
+        assertEquals(watchBefore, m.sessionWatchMs)       // 끊긴 구간은 세지 않는다
+        m.onObservation(shorts(endedAt + 6_500))
+        val end = m.forceEnd(endedAt + 6_500)!!
+        assertEquals(1, end.sessionNumber)
+        assertEquals(1, end.resumeCount)
+        assertEquals(watchBefore + 1_000, end.estimatedWatchMs)
+    }
+
+    @Test
+    fun `re-entry after resume window starts a new session`() {
+        val m = estimated()
+        val endedAt = m.watchThenLeave(5_000)
+        val s = m.reenter(endedAt + 10_001)
+        assertEquals(2, s.startedSession)
+        assertNull(s.resumedSession)
+        assertEquals(0, m.sessionWatchMs)
+    }
+
+    @Test
+    fun `re-entry in another app within the window starts a new session`() {
+        val m = estimated()
+        val endedAt = m.watchThenLeave(5_000)
+        val s = m.reenter(endedAt + 1_000, pkg = IG)
+        assertEquals(2, s.startedSession)
+        assertNull(s.resumedSession)
+    }
+
+    @Test
+    fun `forced end is never resumed`() {
+        val m = estimated()
+        m.forceEnd(3_000)
+        assertEquals(2, m.reenter(4_000).startedSession)
+    }
+
+    @Test
+    fun `resume can be disabled by tuning`() {
+        val m = ShortformStateMachine(tuning.copy(sessionResumeWindowMs = 0))
+        m.onObservation(shorts(0)); m.onObservation(shorts(1_000)); m.onObservation(shorts(2_000))
+        val endedAt = m.watchThenLeave(3_000)
+        assertEquals(2, m.reenter(endedAt + 1_000).startedSession)
+    }
+
+    @Test
+    fun `comment sheet time can be excluded by tuning`() {
+        val m = ShortformStateMachine(tuning.copy(countPartialAsWatch = false))
+        m.onObservation(shorts(0)); m.onObservation(shorts(1_000)); m.onObservation(shorts(2_000))
+        m.onObservation(partial(3_000))              // +1_000 watch
+        m.onObservation(partial(5_000))              // +2_000 obscured
+        val end = m.forceEnd(5_000)!!
+        assertEquals(1_000, end.estimatedWatchMs)
+        assertEquals(0, end.partialWatchMs)
+        assertEquals(2_000, end.obscuredMs)
     }
 
     @Test

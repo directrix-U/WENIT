@@ -28,6 +28,8 @@ enum class ReasonCode {
     PLAYER_FULLSCREEN,
     PLAYER_PARTIAL,
     PLAYER_MINIATURE,
+    /** 플레이어는 아주 작지만 숏폼 컨테이너가 화면을 덮고 있다(댓글창을 끝까지 펼침) */
+    PLAYER_COLLAPSED_UNDER_PANEL,
     OVERLAY_WINDOW,
     REEL_CONTAINERS_WITH_PAGING,
     REEL_CONTAINERS_ONLY,

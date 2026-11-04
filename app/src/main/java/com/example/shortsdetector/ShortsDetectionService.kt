@@ -13,6 +13,13 @@ import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.example.shortsdetector.data.DetectionPreferences
+import com.example.shortsdetector.data.InterventionPolicyPreferences
+import com.example.shortsdetector.data.usage.BackgroundUsageStore
+import com.example.shortsdetector.data.usage.InterventionAction
+import com.example.shortsdetector.data.usage.InterventionMethod
+import com.example.shortsdetector.data.usage.SessionRecorder
+import com.example.shortsdetector.data.usage.SystemUsageClock
+import com.example.shortsdetector.data.usage.UsageDatabase
 import com.example.shortsdetector.detection.DetectionEngine
 import com.example.shortsdetector.detection.EngineOutput
 import com.example.shortsdetector.detection.adapters.instagram.InstagramReelsAdapter
@@ -20,9 +27,11 @@ import com.example.shortsdetector.detection.adapters.youtube.YouTubeShortsAdapte
 import com.example.shortsdetector.detection.adapters.youtube.YouTubeViewIds
 import com.example.shortsdetector.detection.features.AccessibilitySnapshotter
 import com.example.shortsdetector.detection.state.DetectionTuning
+import com.example.shortsdetector.intervention.InterventionPopup
 import com.example.shortsdetector.platform.DetectionStatus
 import com.example.shortsdetector.platform.ScrollEventMapper
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 /**
  * 숏폼(YouTube Shorts, 실험적으로 Instagram Reels) 재생 화면을 감지해서 로컬 알림을 띄우는 접근성 서비스.
@@ -32,7 +41,9 @@ import java.util.Locale
  *  2) 스냅샷  : 활성 창 트리를 구조 값만 담은 스냅샷으로 복사 (화면 원문은 복사하지 않음)
  *  3) 어댑터  : 앱별 규칙 → SHORTFORM / PARTIAL / NOT_SHORTFORM / UNKNOWN
  *  4) 상태    : 공통 상태 머신 (연속 확인, 일시 가림, 이탈 대기)
- *  5) 알림    : 세션이 새로 시작될 때 1회 (재알림 쿨다운), 세션이 끝나면 알림 제거
+ *  5) 개입    : 세션 안 확정 시청시간이 설정한 임계값에 닿으면 1회 (재알림 쿨다운).
+ *              화면 중앙 팝업(TYPE_ACCESSIBILITY_OVERLAY)을 띄우고, 팝업을 끄거나 실패하면 알림으로 대신한다.
+ *              세션이 끝나면 팝업·알림을 지운다.
  *
  * 감시 타이머: 확인 중이거나 세션이 열린 동안에는 이벤트를 기다리지 않고
  * [DetectionConfig.WATCHDOG_INTERVAL_MS] 마다 직접 화면을 확인한다.
@@ -56,6 +67,11 @@ class ShortsDetectionService : AccessibilityService() {
         DetectionConfig.MIN_RENOTIFY_INTERVAL_MS
     )
     private val snapshotter = AccessibilitySnapshotter(DetectionConfig.MAX_NODES_VISITED)
+    private val popup = InterventionPopup(this)
+
+    /** 사용 기록(세션·개입). onServiceConnected 에서 만든다. 저장 실패는 감지에 영향을 주지 않는다. */
+    private var usageStore: BackgroundUsageStore? = null
+    private var recorder: SessionRecorder? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var watchdogScheduled = false
@@ -67,17 +83,24 @@ class ShortsDetectionService : AccessibilityService() {
         scheduleWatchdogIfNeeded()
     }
 
-    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
-        applyEnabledPackages()
+    private val prefsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        when (key) {
+            DetectionPreferences.KEY_WATCH_THRESHOLD_MS -> applyWatchThreshold()
+            DetectionPreferences.KEY_POPUP_ENABLED ->
+                if (!DetectionPreferences.isPopupEnabled(this)) popup.dismiss()
+            else -> applyEnabledPackages()
+        }
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
 
         ShortsNotifier.ensureChannel(this)
+        startUsageRecording()
         cacheScreenSize()
         DetectionPreferences.prefs(this).registerOnSharedPreferenceChangeListener(prefsListener)
         applyEnabledPackages()
+        applyWatchThreshold()
         DetectionStatus.onConnected()
 
         Log.i(
@@ -86,8 +109,42 @@ class ShortsDetectionService : AccessibilityService() {
                 "screen=${screenWidth}x${screenHeight} " +
                 "기준(yt=${YouTubeShortsAdapter.RULE_VERSION}, ig=${InstagramReelsAdapter.RULE_VERSION}, " +
                 "areaRatio>=${tuning.minPlayerAreaRatio}, confirm=${tuning.confirmationCount}, " +
-                "exitGrace=${tuning.exitGraceMs}ms)"
+                "exitGrace=${tuning.exitGraceMs}ms, 개입임계=${engine.watchThresholdMs}ms)"
         )
+    }
+
+    private fun startUsageRecording() {
+        if (recorder != null) return
+        try {
+            val store = BackgroundUsageStore(UsageDatabase.get(this))
+            val r = SessionRecorder(store, SystemUsageClock)
+            r.onServiceStarted(TimeUnit.DAYS.toMillis(DetectionConfig.USAGE_RETENTION_DAYS))
+            usageStore = store
+            recorder = r
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "기록 저장소 시작 실패: ${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun stopUsageRecording() {
+        recorder = null
+        usageStore?.shutdown()
+        usageStore = null
+    }
+
+    /** 기록 실패가 감지·개입을 막지 않게 격리한다. */
+    private inline fun record(block: (SessionRecorder) -> Unit) {
+        val r = recorder ?: return
+        try {
+            block(r)
+        } catch (e: RuntimeException) {
+            Log.w(TAG, "기록 실패: ${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun applyWatchThreshold() {
+        engine.watchThresholdMs = DetectionPreferences.watchThresholdMs(this)
+        Log.i(TAG, "개입 임계값: ${engine.watchThresholdMs}ms")
     }
 
     /**
@@ -164,13 +221,17 @@ class ShortsDetectionService : AccessibilityService() {
     override fun onUnbind(intent: android.content.Intent?): Boolean {
         endSession("onUnbind")
         stopWatchdog()
+        popup.dismiss()
         DetectionPreferences.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
         DetectionStatus.onDisconnected()
+        stopUsageRecording()
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         stopWatchdog()
+        popup.dismiss()
+        stopUsageRecording()
         DetectionPreferences.prefs(this).unregisterOnSharedPreferenceChangeListener(prefsListener)
         DetectionStatus.onDisconnected()
         super.onDestroy()
@@ -244,6 +305,7 @@ class ShortsDetectionService : AccessibilityService() {
         val step = output.step
         val verdict = output.observation.verdict
         DetectionStatus.update(step.current, output.observation.packageName, verdict?.reason)
+        record { it.onOutput(output, engine.sessionProgress()) }
 
         // 판정 로그: 원문 없이 상태 / 근거 코드 / 신호 플래그 / 면적비만 남긴다.
         if (!step.ignored) {
@@ -261,27 +323,74 @@ class ShortsDetectionService : AccessibilityService() {
             Log.i(
                 TAG,
                 "세션 #${s.sessionNumber} 종료: ${s.endReason}${s.exitCause?.let { "($it)" } ?: ""} " +
-                    "pkg=${s.packageName} 추정시청=${s.estimatedWatchMs}ms 가림=${s.obscuredMs}ms " +
+                    "pkg=${s.packageName} 추정시청=${s.estimatedWatchMs}ms(댓글창 ${s.partialWatchMs}ms 포함) 가림=${s.obscuredMs}ms " +
                     "불확실=${s.uncertainMs}ms 최대신뢰도=${s.maxConfidence} rule=${s.ruleVersion}"
             )
         }
-        if (output.cancelNotification) ShortsNotifier.cancel(this)
+        if (output.cancelNotification) {
+            ShortsNotifier.cancel(this)
+            popup.dismiss()
+        }
 
         step.startedSession?.let { n ->
-            val pkg = output.observation.packageName
-            val conf = step.startedConfidence
-            if (output.suppressedByCooldown) {
-                Log.i(TAG, "[$source] ★ 숏폼 감지 #$n (쿨다운 — 알림 생략) pkg=$pkg 신뢰도=$conf")
-            } else {
-                Log.i(TAG, "[$source] ★ 숏폼 감지 #$n pkg=$pkg 신뢰도=$conf")
+            Log.i(
+                TAG,
+                "[$source] ★ 숏폼 감지 #$n pkg=${output.observation.packageName} 신뢰도=${step.startedConfidence} " +
+                    "(개입은 ${engine.watchThresholdMs}ms 시청 후)"
+            )
+        }
+        step.resumedSession?.let { n ->
+            Log.i(TAG, "[$source] ★ 세션 #$n 이어짐 pkg=${output.observation.packageName} (누적 시청시간 유지)")
+        }
+        if (output.suppressedByCooldown) {
+            Log.i(TAG, "[$source] 개입 임계 도달 (쿨다운 — 생략)")
+            record {
+                it.onIntervention(
+                    engine.sessionProgress()?.sessionNumber, InterventionMethod.SUPPRESSED_BY_COOLDOWN,
+                    engine.sessionProgress()?.estimatedWatchMs ?: 0L, engine.watchThresholdMs,
+                    level = InterventionPolicyPreferences.load(this).level
+                )
             }
         }
         output.notifySession?.let { n ->
-            val posted = ShortsNotifier.notifyShortformDetected(
-                this, n, output.observation.packageName, step.startedConfidence
-            )
-            if (posted) engine.onNotificationPosted(output.observation.atMs)
+            intervene(n, output.observation.packageName, output.notifyWatchMs ?: 0L, output.observation.atMs, source)
         }
+    }
+
+    /** 팝업을 우선 띄우고, 꺼져 있거나 실패하면 알림으로 대신한다. 둘 다 실패하면 쿨다운을 걸지 않는다. */
+    private fun intervene(session: Int, pkg: String?, watchMs: Long, atMs: Long, source: String) {
+        val interventionId = recorder?.newInterventionId()
+        val popupShown = DetectionPreferences.isPopupEnabled(this) &&
+            popup.show(getString(R.string.popup_title, ShortsNotifier.formatWatch(this, watchMs))) { action ->
+                if (interventionId != null) record {
+                    it.onInterventionAction(
+                        interventionId,
+                        when (action) {
+                            InterventionPopup.Action.OPEN_APP -> InterventionAction.OPEN_APP
+                            InterventionPopup.Action.DISMISS -> InterventionAction.DISMISS
+                        }
+                    )
+                }
+            }
+        val notified = !popupShown &&
+            ShortsNotifier.notifyWatchThreshold(this, session, pkg, watchMs, interventionId)
+        val shown = popupShown || notified
+        Log.i(
+            TAG,
+            "[$source] ★ 개입 #$session 시청=${watchMs}ms 방식=${if (popupShown) "팝업" else if (shown) "알림" else "실패"}"
+        )
+        if (interventionId != null) record {
+            val method = when {
+                popupShown -> InterventionMethod.POPUP
+                notified -> InterventionMethod.NOTIFICATION
+                else -> InterventionMethod.FAILED
+            }
+            it.onIntervention(
+                session, method, watchMs, engine.watchThresholdMs,
+                level = InterventionPolicyPreferences.load(this).level, id = interventionId
+            )
+        }
+        if (shown) engine.onNotificationPosted(atMs)
     }
 
     @Suppress("DEPRECATION")

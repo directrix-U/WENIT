@@ -7,11 +7,20 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.util.Log
 import android.view.accessibility.AccessibilityManager
+import android.widget.RadioButton
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.shortsdetector.data.DetectionPreferences
+import com.example.shortsdetector.data.usage.DailyUsageCalculator
+import com.example.shortsdetector.data.usage.InterventionAction
+import com.example.shortsdetector.data.usage.UsageDatabase
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.concurrent.Executors
 import com.example.shortsdetector.databinding.ActivityMainBinding
 import com.example.shortsdetector.platform.DetectionStatus
 
@@ -20,11 +29,15 @@ import com.example.shortsdetector.platform.DetectionStatus
  *  - 접근성 서비스 활성화 상태 표시 + 설정 화면으로 이동
  *  - Android 13+ 알림 권한 요청
  *  - 감지 대상 앱 선택(YouTube 기본 켜짐, Instagram 실험적·기본 꺼짐)
+ *  - 개입 임계값(얼마나 본 뒤 알릴지)과 화면 중앙 팝업 사용 여부
+ *  - 개입 팝업을 누르면 이 화면으로 온다([EXTRA_FROM_INTERVENTION])
  *  - 서비스가 연결된 경우에만 현재 감지 상태 표시
+ *  - 사용 기록: 오늘 집계 한 줄 + 전체 삭제(확인 대화상자). 통계 화면은 다음 단계.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
+    private val io = Executors.newSingleThreadExecutor()
 
     private val requestNotificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -61,14 +74,119 @@ class MainActivity : AppCompatActivity() {
             DetectionPreferences.setInstagramEnabled(this, checked)
         }
 
+        setupInterventionSettings()
+        binding.buttonDeleteRecords.setOnClickListener { confirmDeleteRecords() }
+        recordNotificationTap(intent)
+
         // 첫 실행이면 알림 권한을 미리 물어본다. 없으면 감지해도 알림이 안 뜬다.
         requestNotificationPermissionIfNeeded(silentIfGranted = true)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        recordNotificationTap(intent)
+    }
+
+    override fun onDestroy() {
+        io.shutdown()
+        super.onDestroy()
+    }
+
+    /** 개입 알림을 눌러서 왔으면 그 개입에 "앱 열기" 반응을 기록한다(팝업 반응은 서비스가 기록). */
+    private fun recordNotificationTap(intent: Intent?) {
+        val id = intent?.getStringExtra(EXTRA_INTERVENTION_ID) ?: return
+        intent.removeExtra(EXTRA_INTERVENTION_ID) // 화면 회전 등으로 다시 기록하지 않게
+        runIo {
+            UsageDatabase.get(this).setInterventionAction(id, InterventionAction.OPEN_APP, System.currentTimeMillis())
+        }
+    }
+
+    /** 오늘(기기 현지 시간) 집계와 저장된 세션 수를 보여 준다. */
+    private fun refreshRecords() {
+        runIo {
+            val db = UsageDatabase.get(this)
+            val zone = ZoneId.systemDefault()
+            val today = LocalDate.now(zone)
+            val from = today.atStartOfDay(zone).toInstant().toEpochMilli()
+            val to = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val day = DailyUsageCalculator.aggregate(db.sessionsOverlapping(from, to), zone, today, today).single()
+            val total = db.sessionCount()
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                binding.textRecords.text = getString(
+                    R.string.records_summary,
+                    ShortsNotifier.formatWatch(this, day.estimatedWatchMs),
+                    day.sessionCount,
+                    total,
+                    DetectionConfig.USAGE_RETENTION_DAYS.toInt()
+                )
+            }
+        }
+    }
+
+    private fun confirmDeleteRecords() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_delete_records_title)
+            .setMessage(R.string.dialog_delete_records_body)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_delete) { _, _ ->
+                runIo {
+                    UsageDatabase.get(this).deleteAll()
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        Toast.makeText(this, R.string.toast_records_deleted, Toast.LENGTH_SHORT).show()
+                        refreshRecords()
+                    }
+                }
+            }
+            .show()
+    }
+
+    /** DB 작업은 메인 스레드 밖에서. 실패는 화면에 "못 읽음"으로만 표시하고 원문을 남기지 않는다. */
+    private fun runIo(block: () -> Unit) {
+        try {
+            io.execute {
+                try {
+                    block()
+                } catch (e: RuntimeException) {
+                    Log.w(ShortsDetectionService.TAG, "기록 화면 작업 실패: ${e.javaClass.simpleName}")
+                    runOnUiThread {
+                        if (!isDestroyed) binding.textRecords.setText(R.string.records_unavailable)
+                    }
+                }
+            }
+        } catch (e: RuntimeException) {
+            Log.w(ShortsDetectionService.TAG, "기록 화면 작업 예약 실패: ${e.javaClass.simpleName}")
+        }
+    }
+
+    private fun setupInterventionSettings() {
+        val current = DetectionPreferences.watchThresholdMs(this)
+        DetectionConfig.WATCH_THRESHOLD_CHOICES_MS.forEachIndexed { i, ms ->
+            val label = ShortsNotifier.formatWatch(this, ms)
+            val button = RadioButton(this).apply {
+                id = android.view.View.generateViewId()
+                // 첫 선택지(30초)는 기기 테스트용
+                text = if (i == 0) getString(R.string.threshold_test_suffix, label) else label
+                isChecked = ms == current
+                setOnCheckedChangeListener { _, checked ->
+                    if (checked) DetectionPreferences.setWatchThresholdMs(this@MainActivity, ms)
+                }
+            }
+            binding.groupThreshold.addView(button)
+        }
+        binding.switchPopup.isChecked = DetectionPreferences.isPopupEnabled(this)
+        binding.switchPopup.setOnCheckedChangeListener { _, checked ->
+            DetectionPreferences.setPopupEnabled(this, checked)
+            refreshStatus()
+        }
     }
 
     override fun onResume() {
         super.onResume()
         // 설정 화면에서 돌아왔을 때 상태를 다시 읽는다.
         refreshStatus()
+        refreshRecords()
     }
 
     private fun refreshStatus() {
@@ -96,7 +214,8 @@ class MainActivity : AppCompatActivity() {
 
         binding.textHint.text = when {
             !accessibilityOn -> getString(R.string.hint_enable_accessibility)
-            !notificationOn -> getString(R.string.hint_enable_notification)
+            !notificationOn && !DetectionPreferences.isPopupEnabled(this) ->
+                getString(R.string.hint_enable_notification)
             else -> getString(R.string.hint_ready)
         }
     }
@@ -119,6 +238,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
         requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    companion object {
+        /** 개입 팝업에서 열렸음을 표시. 지금은 화면 구분 없이 같은 화면을 연다(개입 선택 화면은 다음 단계). */
+        const val EXTRA_FROM_INTERVENTION = "from_intervention"
+
+        /** 개입 알림을 눌렀을 때 반응을 기록할 개입 기록 id */
+        const val EXTRA_INTERVENTION_ID = "intervention_id"
     }
 
     /** 설정 > 접근성에서 우리 서비스가 켜져 있는지 확인 */

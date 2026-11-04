@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ : 사용 기록 DB 와 프로필·목표·개입 정책은 클라우드 백업·기기 이전에서 뺀다(동의 없는 외부 전송 방지). 그 밖의 설정은 백업 허용. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="database" path="wenit_usage.db" />
+        <exclude domain="database" path="wenit_usage.db-journal" />
+        <exclude domain="database" path="wenit_usage.db-wal" />
+        <exclude domain="database" path="wenit_usage.db-shm" />
+        <exclude domain="sharedpref" path="user_profile.xml" />
+        <exclude domain="sharedpref" path="user_goals.xml" />
+        <exclude domain="sharedpref" path="intervention_policy.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="database" path="wenit_usage.db" />
+        <exclude domain="database" path="wenit_usage.db-journal" />
+        <exclude domain="database" path="wenit_usage.db-wal" />
+        <exclude domain="database" path="wenit_usage.db-shm" />
+        <exclude domain="sharedpref" path="user_profile.xml" />
+        <exclude domain="sharedpref" path="user_goals.xml" />
+        <exclude domain="sharedpref" path="intervention_policy.xml" />
+    </device-transfer>
+</data-extraction-rules>

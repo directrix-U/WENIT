@@ -11,20 +11,24 @@ import com.example.shortsdetector.detection.model.Observation
 import com.example.shortsdetector.detection.model.ReasonCode
 import com.example.shortsdetector.detection.model.ScreenSnapshot
 import com.example.shortsdetector.detection.model.ScrollSignal
+import com.example.shortsdetector.detection.model.SessionProgress
 import com.example.shortsdetector.detection.model.SessionSummary
 import com.example.shortsdetector.detection.model.WindowStatus
 import com.example.shortsdetector.detection.state.DetectionTuning
 import com.example.shortsdetector.detection.state.ShortformStateMachine
 import com.example.shortsdetector.detection.state.Step
 import com.example.shortsdetector.intervention.NotificationGate
+import com.example.shortsdetector.intervention.WatchThresholdPolicy
 
 /** 엔진이 서비스에 요청하는 동작. 서비스는 이것만 실행한다(알림 게시/취소). */
 data class EngineOutput(
     val observation: Observation,
     val step: Step,
-    /** 새 세션이 시작됐고 쿨다운도 지났다 → 알림을 띄워라 */
+    /** 열린 세션의 확정 시청시간이 임계값에 닿았고 쿨다운도 지났다 → 개입(팝업/알림)을 띄워라 */
     val notifySession: Int? = null,
-    /** 새 세션이 시작됐지만 쿨다운 때문에 알림을 생략했다(로그용) */
+    /** [notifySession] 일 때 그 세션의 확정 시청시간(ms). 문구 표시용. */
+    val notifyWatchMs: Long? = null,
+    /** 임계값에 닿았지만 쿨다운 때문에 개입을 생략했다(로그용) */
     val suppressedByCooldown: Boolean = false,
     /** 세션이 끝났다 → 떠 있는 감지 알림을 지워라 */
     val cancelNotification: Boolean = false
@@ -43,12 +47,20 @@ data class EngineOutput(
 class DetectionEngine(
     private val tuning: DetectionTuning,
     adapters: List<ShortformAdapter>,
-    renotifyIntervalMs: Long
+    renotifyIntervalMs: Long,
+    /** 세션 안에서 이만큼 본 뒤에 개입한다. 0 이면 세션 시작 즉시(기존 동작). */
+    watchThresholdMs: Long = 0L
 ) {
     private val adaptersByPackage = adapters.associateBy { it.packageName }
     private val scrollTracker = ScrollSignalTracker()
     private val machine = ShortformStateMachine(tuning)
     private val gate = NotificationGate(renotifyIntervalMs)
+    private val thresholdPolicy = WatchThresholdPolicy(watchThresholdMs)
+
+    /** 개입 임계값. 설정이 바뀌면 바로 반영한다(열린 세션에도 적용). */
+    var watchThresholdMs: Long
+        get() = thresholdPolicy.thresholdMs
+        set(value) { thresholdPolicy.thresholdMs = value }
 
     /** 현재 감지를 켠 패키지. 어댑터가 있어도 여기에 없으면 "다른 창"으로 본다. */
     var enabledPackages: Set<String> = adaptersByPackage.keys
@@ -58,6 +70,9 @@ class DetectionEngine(
 
     /** 열린 세션의 패키지. 없으면 null. */
     val sessionPackage: String? get() = machine.sessionPackage
+
+    /** 열린 세션의 현재 누적값(중간 저장용). 없으면 null. */
+    fun sessionProgress(): SessionProgress? = machine.progress()
 
     fun adapterFor(packageName: String?): ShortformAdapter? =
         packageName?.takeIf { it in enabledPackages }?.let { adaptersByPackage[it] }
@@ -139,13 +154,16 @@ class DetectionEngine(
 
     private fun onObservation(obs: Observation): EngineOutput {
         val step = machine.onObservation(obs)
-        val started = step.startedSession
-        val canNotify = started != null && gate.canNotify(obs.atMs)
+        val session = machine.sessionNumber
+        val watchMs = machine.sessionWatchMs
+        val due = thresholdPolicy.shouldDecide(session, watchMs)
+        val canNotify = due && gate.canNotify(obs.atMs)
         return EngineOutput(
             observation = obs,
             step = step,
-            notifySession = if (canNotify) started else null,
-            suppressedByCooldown = started != null && !canNotify,
+            notifySession = if (canNotify) session else null,
+            notifyWatchMs = if (canNotify) watchMs else null,
+            suppressedByCooldown = due && !canNotify,
             cancelNotification = step.endedSession != null
         )
     }

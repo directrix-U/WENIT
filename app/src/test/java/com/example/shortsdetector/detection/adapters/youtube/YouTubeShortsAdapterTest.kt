@@ -8,6 +8,7 @@ import com.example.shortsdetector.detection.model.ScreenSnapshot
 import com.example.shortsdetector.detection.model.Signal
 import com.example.shortsdetector.detection.model.VerdictKind
 import com.example.shortsdetector.testutil.Fixtures
+import com.example.shortsdetector.testutil.plus
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -92,6 +93,25 @@ class YouTubeShortsAdapterTest {
         assertEquals(VerdictKind.NOT_SHORTFORM, v.kind)
         assertEquals(ReasonCode.PLAYER_MINIATURE, v.reason)
         assertEquals(0.077f, v.playerAreaRatio, 0.002f)
+    }
+
+    @Test
+    fun `comments sheet fully expanded (emulator 0_014, user log 0_001) still holds as partial`() {
+        for (bottom in listOf(175, 145)) {
+            val v = adapter.evaluate(Fixtures.youtubeShortsCommentsExpanded(playerBottom = bottom), idle)
+            assertEquals(VerdictKind.SHORTFORM_PARTIAL, v.kind)
+            assertEquals(ReasonCode.PLAYER_COLLAPSED_UNDER_PANEL, v.reason)
+            assertTrue(v.playerAreaRatio < 0.02f)
+        }
+    }
+
+    @Test
+    fun `tiny player with only one large container is still a miniature`() {
+        val one = Fixtures.youtubeShortsMiniature() +
+            Fixtures.node(Fixtures.id("reel_recycler"), "androidx.recyclerview.widget.RecyclerView", top = 142, bottom = 2235)
+        val v = adapter.evaluate(one, idle)
+        assertEquals(VerdictKind.NOT_SHORTFORM, v.kind)
+        assertEquals(ReasonCode.PLAYER_MINIATURE, v.reason)
     }
 
     @Test

@@ -83,6 +83,21 @@ object Fixtures {
     }
 
     /**
+     * 댓글창을 끝까지 펼친 쇼츠. 에뮬레이터(YouTube 21.18.164, 2026-10-31) 구조 덤프의 bounds 를 옮겼다(텍스트 없음).
+     * 플레이어·overlay_root 는 [0,142][1080,175](면적비 0.014)로 줄고, reel_recycler·fragment_root·
+     * page_container 는 [0,142][1080,2235](0.863) 그대로다. 사용자 테스트 로그에서는 플레이어가 0.001 까지 줄었다.
+     */
+    fun youtubeShortsCommentsExpanded(playerBottom: Int = 175): ScreenSnapshot {
+        val shrink: (UiNode) -> UiNode = { n ->
+            if (n.viewId == YouTubeViewIds.SHORTS_PLAYER || n.viewId == id("reel_player_overlay_root")) {
+                n.copy(top = 142, bottom = playerBottom)
+            } else n
+        }
+        return youtubeShorts().mapNodes(shrink) +
+            node(id("app_engagement_panel"), "android.widget.RelativeLayout", top = 0, bottom = 2361)
+    }
+
+    /**
      * synthetic: Clear Screen 모드 가정. 오버레이(버튼·제목·푸터) 노드가 사라지고 플레이어만 남는다고 가정.
      * 실제 Clear Screen 트리는 미확인(TODO: VERIFY ON DEVICE).
      */

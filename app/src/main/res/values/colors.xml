@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 개입 팝업. 다크 모드 값은 values-night/colors.xml -->
+    <color name="popup_bg">#FFFFFFFF</color>
+    <color name="popup_text">#FF1F1F1F</color>
+    <color name="popup_text_secondary">#FF5F6368</color>
+    <color name="popup_accent">#FF3D5AFE</color>
+    <color name="popup_on_accent">#FFFFFFFF</color>
+</resources>

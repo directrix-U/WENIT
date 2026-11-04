@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 이하 자동 백업 : 사용 기록 DB 와 프로필·목표·개입 정책은 뺀다. 그 밖의 설정은 백업 허용. -->
+<full-backup-content>
+    <exclude domain="database" path="wenit_usage.db" />
+    <exclude domain="database" path="wenit_usage.db-journal" />
+    <exclude domain="database" path="wenit_usage.db-wal" />
+    <exclude domain="database" path="wenit_usage.db-shm" />
+    <exclude domain="sharedpref" path="user_profile.xml" />
+    <exclude domain="sharedpref" path="user_goals.xml" />
+    <exclude domain="sharedpref" path="intervention_policy.xml" />
+</full-backup-content>

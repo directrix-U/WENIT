@@ -65,6 +65,13 @@ class YouTubeShortsAdapter(private val tuning: DetectionTuning = DetectionTuning
                 if (containerIds.isNotEmpty() || paging) Confidence.HIGH else Confidence.MEDIUM,
                 ReasonCode.PLAYER_FULLSCREEN
             )
+            // 댓글창을 끝까지 펼치면 플레이어가 화면 위쪽 띠(면적비 0.001~0.014)로 줄어들지만
+            // reel_recycler 등 컨테이너는 전체화면(0.863) 그대로다(에뮬레이터 YouTube 21.18.164, 2026-10-31).
+            // PiP 는 창 자체가 작아져 컨테이너가 화면을 덮을 수 없으므로 여기에 걸리지 않는다고 본다.
+            // TODO: VERIFY ON DEVICE — PiP 상태의 컨테이너 bounds(이번에는 PiP 재현 실패), 실기기 댓글창 펼침
+            legacy.playerVisible && legacy.maxAreaRatio < tuning.minHoldAreaRatio &&
+                containerIds.size >= MIN_CONTAINERS_WITHOUT_PLAYER ->
+                verdict(VerdictKind.SHORTFORM_PARTIAL, Confidence.MEDIUM, ReasonCode.PLAYER_COLLAPSED_UNDER_PANEL)
             // 기존 규칙은 보이기만 하면 유지했지만, PiP/미니플레이어처럼 아주 작은 플레이어는 유지하지 않는다.
             legacy.playerVisible && legacy.maxAreaRatio < tuning.minHoldAreaRatio ->
                 verdict(VerdictKind.NOT_SHORTFORM, Confidence.LOW, ReasonCode.PLAYER_MINIATURE)

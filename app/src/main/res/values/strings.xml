@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">쇼츠 감지 프로토타입</string>
-    <string name="app_subtitle">유튜브 쇼츠(실험적으로 인스타그램 릴스) 재생 화면으로 추정되면 로컬 알림을 띄웁니다. (차단 없음, 감지는 추정입니다)</string>
+    <string name="app_subtitle">유튜브 쇼츠(실험적으로 인스타그램 릴스)를 설정한 시간 이상 본 것으로 추정되면 화면 중앙에 팝업을 띄웁니다. (차단 없음, 감지는 추정입니다)</string>
 
     <string name="status_accessibility">접근성 서비스: %1$s</string>
     <string name="status_notification">알림 권한: %1$s</string>
@@ -11,7 +11,7 @@
     <string name="state_denied">거부됨</string>
 
     <string name="hint_enable_accessibility">아래 버튼으로 설정 > 접근성에서 \"쇼츠 감지 프로토타입\"을 켜 주세요.</string>
-    <string name="hint_enable_notification">알림 권한이 없으면 감지해도 알림이 표시되지 않습니다.</string>
+    <string name="hint_enable_notification">팝업은 알림 권한 없이도 뜹니다. 팝업을 끄거나 팝업을 띄우지 못하면 알림으로 대신하는데, 그때는 알림 권한이 필요합니다.</string>
     <string name="hint_ready">준비 완료. 유튜브에서 쇼츠를 재생해 보세요.</string>
 
     <string name="button_open_accessibility">접근성 설정 열기</string>
@@ -24,8 +24,20 @@
 
     <string name="channel_name">쇼츠 감지</string>
     <string name="channel_description">숏폼 재생 화면으로 추정되면 알려 줍니다.</string>
-    <string name="notification_title">숏폼 시청 추정</string>
-    <string name="notification_body">%1$d번째 감지 · %2$s · 신뢰도 %3$s</string>
+    <string name="notification_body">%1$s · 추정 시청 %2$s · %3$d번째 세션</string>
+
+    <!-- 개입 문구: 비난·수치심·진단 표현을 쓰지 않는다(명세 개입 원칙) -->
+    <string name="popup_title">쇼츠를 %1$s째 보고 있어요</string>
+    <string name="popup_body">지금 계속 볼지, 잠깐 멈출지 선택해 볼래요?\n누르면 앱으로 이동해요.</string>
+    <string name="popup_open">앱 열기</string>
+    <string name="popup_dismiss">닫기</string>
+    <string name="duration_seconds">%1$d초</string>
+    <string name="duration_minutes">%1$d분</string>
+
+    <string name="section_intervention">알림 시점</string>
+    <string name="threshold_label">쇼츠를 이만큼 본 뒤에 알려요 (한 번 볼 때 기준, 댓글창 보는 시간 포함, 대화상자로 가린 시간 제외)</string>
+    <string name="threshold_test_suffix">%1$s (테스트용)</string>
+    <string name="switch_popup">화면 중앙 팝업으로 알리기 (끄면 상단 알림만)</string>
     <string name="app_label_youtube">YouTube Shorts</string>
     <string name="app_label_instagram">Instagram Reels</string>
 
@@ -40,4 +52,13 @@
     <string name="status_detection">현재 감지 상태: %1$s</string>
     <string name="status_detection_detail">현재 감지 상태: %1$s (%2$s)</string>
     <string name="status_detection_inactive">현재 감지 상태: 서비스가 꺼져 있어 감지하지 않습니다</string>
+    <string name="section_records">사용 기록</string>
+    <string name="records_summary">오늘 추정 시청 %1$s · 세션 %2$d회\n저장된 세션 %3$d개 · 이 기기에만 저장되고 %4$d일 뒤 자동 삭제돼요.</string>
+    <string name="records_unavailable">기록을 읽지 못했어요.</string>
+    <string name="button_delete_records">기록 전체 삭제</string>
+    <string name="dialog_delete_records_title">사용 기록을 모두 지울까요?</string>
+    <string name="dialog_delete_records_body">감지된 세션과 알림 기록이 모두 지워지고 되돌릴 수 없어요. 설정은 그대로 남아요.</string>
+    <string name="dialog_delete">삭제</string>
+    <string name="dialog_cancel">취소</string>
+    <string name="toast_records_deleted">기록을 지웠어요.</string>
 </resources>
