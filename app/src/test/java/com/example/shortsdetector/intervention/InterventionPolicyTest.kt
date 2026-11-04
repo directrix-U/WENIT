@@ -80,12 +80,12 @@ class InterventionPolicyTest {
     }
 
     @Test
-    fun `preferences seed from the existing threshold, then return the saved clamped policy`() {
+    fun `preferences return defaults, then the saved clamped policy`() {
         val p = FakeSharedPreferences()
-        assertEquals(60_000, InterventionPolicyPreferences.read(p, 60_000).thresholdMs)
+        assertEquals(InterventionPolicy(), InterventionPolicyPreferences.read(p))
 
         InterventionPolicyPreferences.write(p, InterventionPolicy(thresholdMs = 120_000, level = 99))
-        val saved = InterventionPolicyPreferences.read(p, 60_000)
+        val saved = InterventionPolicyPreferences.read(p)
         assertEquals(120_000, saved.thresholdMs)
         assertEquals(3, saved.level)
     }
@@ -94,19 +94,19 @@ class InterventionPolicyTest {
     fun `corrupt or tampered stored policy cannot leave the bounds`() {
         val p = FakeSharedPreferences()
         p.values["policy"] = "level=50;maxDailyInterventions=100000"
-        val read = InterventionPolicyPreferences.read(p, 60_000)
+        val read = InterventionPolicyPreferences.read(p)
         assertEquals(3, read.level)
         assertEquals(30, read.maxDailyInterventions)
 
         p.values["policy"] = "garbage"
-        assertEquals(1, InterventionPolicyPreferences.read(p, 60_000).level)
+        assertEquals(1, InterventionPolicyPreferences.read(p).level)
     }
 
     @Test
     fun `streaks survive a restart`() {
         val p = FakeSharedPreferences()
-        assertEquals(LevelStreaks(), InterventionPolicyPreferences.readStreaks(p))
-        InterventionPolicyPreferences.writeStreaks(p, LevelStreaks(skips = 1, stops = 2))
-        assertEquals(LevelStreaks(1, 2), InterventionPolicyPreferences.readStreaks(p))
+        assertEquals(LevelStreaks(), InterventionPolicyPreferences.readLevelStreaks(p))
+        InterventionPolicyPreferences.writeLevelState(p, 1, LevelStreaks(skips = 1, stops = 2))
+        assertEquals(LevelStreaks(1, 2), InterventionPolicyPreferences.readLevelStreaks(p))
     }
 }

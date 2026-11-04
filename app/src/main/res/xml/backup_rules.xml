@@ -8,4 +8,5 @@
     <exclude domain="sharedpref" path="user_profile.xml" />
     <exclude domain="sharedpref" path="user_goals.xml" />
     <exclude domain="sharedpref" path="intervention_policy.xml" />
+    <exclude domain="sharedpref" path="saved_time_baseline.xml" />
 </full-backup-content>

@@ -42,7 +42,7 @@ data class SessionRecord(
     val resumeCount: Int
 )
 
-enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLDOWN }
+enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLDOWN, SUPPRESSED_BY_DAILY_LIMIT }
 
 enum class InterventionAction { OPEN_APP, DISMISS }
 
@@ -77,10 +77,13 @@ data class InterventionRecord(
     val level: Int? = null,
     val userReason: InterventionUserReason? = null,
     /** 아직 결과가 없으면 null */
-    val outcome: InterventionOutcome? = null
+    val outcome: InterventionOutcome? = null,
+    /** 시연 모드의 개입. 통계와 AI 입력에서 기본으로 뺀다. */
+    val isDemo: Boolean = false
 )
 
-enum class PolicyChangeSource { AGENT, USER, DEFAULT }
+/** [RULE]: 사람이나 에이전트가 아니라 결정론적 단계 규칙이 바꿨다. */
+enum class PolicyChangeSource { AGENT, USER, DEFAULT, RULE }
 
 enum class PolicyChangeStatus { APPLIED, REJECTED_OUT_OF_RANGE, PENDING_APPROVAL, REVERTED_BY_USER }
 
@@ -99,5 +102,7 @@ data class PolicyChangeRecord(
     val inputSummary: String?,
     val status: PolicyChangeStatus,
     /** 에이전트 변경일 때만 */
-    val modelId: String? = null
+    val modelId: String? = null,
+    /** 시연 모드의 변경. AI 입력에서 뺀다. */
+    val isDemo: Boolean = false
 )

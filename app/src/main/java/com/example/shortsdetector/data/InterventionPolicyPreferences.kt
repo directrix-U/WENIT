@@ -3,15 +3,21 @@ package com.example.shortsdetector.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import com.example.shortsdetector.DetectionConfig
+import com.example.shortsdetector.data.goal.Goal
+import com.example.shortsdetector.data.goal.GoalPreferences
+import com.example.shortsdetector.intervention.DemoMode
 import com.example.shortsdetector.intervention.InterventionPolicy
+import com.example.shortsdetector.intervention.InterventionPolicyBounds
 import com.example.shortsdetector.intervention.InterventionPolicyCodec
 import com.example.shortsdetector.intervention.LevelStreaks
+import com.example.shortsdetector.intervention.ResolvedPolicy
 
 /**
- * 현재 개입 정책과 단계 연속 횟수. 항상 범위 안으로 잘린 값을 돌려준다. 클라우드 백업에서 제외한다.
+ * 개입 정책 저장. 개입 기준 시간의 유일한 저장소다. 클라우드 백업에서 제외한다.
  *
- * 저장된 정책이 없으면 기본 정책에 기존 임계값 설정([DetectionPreferences.watchThresholdMs])을 넣어 돌려준다.
- * 지금 서비스가 실제로 쓰는 임계값은 여전히 DetectionPreferences 쪽이다. 정책의 임계값·쿨다운·하루 상한은 아직 판정에 연결되지 않았다.
+ * 시연 모드의 단계·연속 횟수는 별도 칸에 둔다. 시연 값을 정책에 쓰면 껐을 때 원래 정책으로 돌아갈 수 없다.
+ * 판정에는 [resolve] 결과를 쓴다.
  */
 object InterventionPolicyPreferences {
 
@@ -19,34 +25,89 @@ object InterventionPolicyPreferences {
     private const val KEY_POLICY = "policy"
     private const val KEY_SKIP_STREAK = "skip_streak"
     private const val KEY_STOP_STREAK = "stop_streak"
+    private const val KEY_DEMO_MODE = "demo_mode"
+    private const val KEY_DEMO_RUN_ID = "demo_run_id"
+    private const val KEY_DEMO_LEVEL = "demo_level"
+    private const val KEY_DEMO_SKIP_STREAK = "demo_skip_streak"
+    private const val KEY_DEMO_STOP_STREAK = "demo_stop_streak"
 
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
-    fun load(context: Context): InterventionPolicy =
-        read(prefs(context), DetectionPreferences.watchThresholdMs(context))
+    /** 저장된 정책. 시연 모드와 무관하다. */
+    fun load(context: Context): InterventionPolicy {
+        migrate(context)
+        return read(prefs(context))
+    }
 
     fun save(context: Context, policy: InterventionPolicy) = write(prefs(context), policy)
 
-    fun loadStreaks(context: Context): LevelStreaks = readStreaks(prefs(context))
-
-    fun saveStreaks(context: Context, streaks: LevelStreaks) = writeStreaks(prefs(context), streaks)
-
-    internal fun read(p: SharedPreferences, fallbackThresholdMs: Long): InterventionPolicy {
-        val stored = p.getString(KEY_POLICY, null)?.let(InterventionPolicyCodec::decode)
-        return (stored ?: InterventionPolicy(thresholdMs = fallbackThresholdMs)).clamped()
+    /** 판정에 쓸 값: 시연 모드와 PER_SESSION 목표를 반영한다. */
+    fun resolve(context: Context): ResolvedPolicy {
+        migrate(context)
+        return resolve(prefs(context), GoalPreferences.load(context))
     }
+
+    fun isDemoMode(context: Context): Boolean = prefs(context).getBoolean(KEY_DEMO_MODE, false)
+
+    fun setDemoMode(context: Context, enabled: Boolean) = writeDemoMode(prefs(context), enabled)
+
+    private fun migrate(context: Context) {
+        migrateLegacyThreshold(prefs(context), DetectionPreferences.prefs(context))
+    }
+
+    /**
+     * 예전 임계값 설정을 정책으로 한 번 옮기고 지운다. 정책이 이미 있으면 옮기지 않는다.
+     * 예전 값은 선택지에 있을 때만 쓴다(기존 읽기 규칙과 같음).
+     * @return 이번 호출에서 옮겼으면 true
+     */
+    internal fun migrateLegacyThreshold(p: SharedPreferences, legacy: SharedPreferences): Boolean {
+        if (p.contains(KEY_POLICY)) return false
+        val old = legacy.getLong(DetectionPreferences.LEGACY_KEY_WATCH_THRESHOLD_MS, DetectionConfig.DEFAULT_WATCH_THRESHOLD_MS)
+        val threshold = if (old in DetectionConfig.WATCH_THRESHOLD_CHOICES_MS) old else DetectionConfig.DEFAULT_WATCH_THRESHOLD_MS
+        write(p, InterventionPolicy(thresholdMs = threshold))
+        legacy.edit { remove(DetectionPreferences.LEGACY_KEY_WATCH_THRESHOLD_MS) }
+        return true
+    }
+
+    internal fun read(p: SharedPreferences): InterventionPolicy =
+        (p.getString(KEY_POLICY, null)?.let(InterventionPolicyCodec::decode) ?: InterventionPolicy()).clamped()
 
     internal fun write(p: SharedPreferences, policy: InterventionPolicy) =
         p.edit { putString(KEY_POLICY, InterventionPolicyCodec.encode(policy.clamped())) }
 
-    internal fun readStreaks(p: SharedPreferences) = LevelStreaks(
-        skips = p.getInt(KEY_SKIP_STREAK, 0).coerceAtLeast(0),
-        stops = p.getInt(KEY_STOP_STREAK, 0).coerceAtLeast(0)
-    )
+    internal fun resolve(p: SharedPreferences, goals: List<Goal>): ResolvedPolicy {
+        val saved = read(p)
+        if (!p.getBoolean(KEY_DEMO_MODE, false)) return ResolvedPolicy(saved, saved.effectiveThresholdMs(goals), false)
+        val demo = DemoMode.overlay(saved, p.getInt(KEY_DEMO_LEVEL, InterventionPolicyBounds.MIN_LEVEL))
+        return ResolvedPolicy(demo, demo.thresholdMs, true, p.getLong(KEY_DEMO_RUN_ID, 0L))
+    }
 
-    internal fun writeStreaks(p: SharedPreferences, streaks: LevelStreaks) = p.edit {
-        putInt(KEY_SKIP_STREAK, streaks.skips)
-        putInt(KEY_STOP_STREAK, streaks.stops)
+    /** 켤 때마다 시연용 단계를 Lv.1 부터, 시연 전용 하루 카운터를 0 부터 다시 시작한다. */
+    internal fun writeDemoMode(p: SharedPreferences, enabled: Boolean, nowMs: Long = System.currentTimeMillis()) = p.edit {
+        putBoolean(KEY_DEMO_MODE, enabled)
+        if (enabled) putLong(KEY_DEMO_RUN_ID, nowMs) else remove(KEY_DEMO_RUN_ID)
+        remove(KEY_DEMO_LEVEL)
+        remove(KEY_DEMO_SKIP_STREAK)
+        remove(KEY_DEMO_STOP_STREAK)
+    }
+
+    internal fun readLevelStreaks(p: SharedPreferences): LevelStreaks {
+        val demo = p.getBoolean(KEY_DEMO_MODE, false)
+        return LevelStreaks(
+            skips = p.getInt(if (demo) KEY_DEMO_SKIP_STREAK else KEY_SKIP_STREAK, 0).coerceAtLeast(0),
+            stops = p.getInt(if (demo) KEY_DEMO_STOP_STREAK else KEY_STOP_STREAK, 0).coerceAtLeast(0)
+        )
+    }
+
+    /** 단계 규칙의 결과를 저장한다. 시연 모드면 정책을 건드리지 않는다. */
+    internal fun writeLevelState(p: SharedPreferences, level: Int, streaks: LevelStreaks) {
+        val demo = p.getBoolean(KEY_DEMO_MODE, false)
+        if (!demo) write(p, read(p).copy(level = level))
+        p.edit {
+            if (demo) putInt(KEY_DEMO_LEVEL, level)
+            putInt(if (demo) KEY_DEMO_SKIP_STREAK else KEY_SKIP_STREAK, streaks.skips)
+            putInt(if (demo) KEY_DEMO_STOP_STREAK else KEY_STOP_STREAK, streaks.stops)
+        }
     }
 }

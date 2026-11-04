@@ -82,6 +82,14 @@ class ShortformStateMachine(private val tuning: DetectionTuning = DetectionTunin
     private var sessionCounter = 0
     private var exitSince = 0L
 
+    /** 켜져 있으면 시청시간 대신 가린 시간(obscured)으로 센다. 세션이 끝나면 풀린다. */
+    private var watchHold = false
+
+    /** Lv.3 숨 고르기처럼 앱이 화면을 덮은 동안 켠다. 상태 전이와 이탈 판정은 바뀌지 않는다. */
+    fun setWatchHold(hold: Boolean) {
+        watchHold = hold && session != null
+    }
+
     val sessionPackage: String? get() = session?.packageName
 
     /** 열린 세션 번호. 없으면 null. */
@@ -227,6 +235,10 @@ class ShortformStateMachine(private val tuning: DetectionTuning = DetectionTunin
     private fun credit(gap: Long) {
         val open = session ?: return
         val c = minOf(gap, tuning.maxCreditPerStepMs)
+        if (watchHold && state != DetectionState.EXIT_PENDING) {
+            open.obscuredMs += c
+            return
+        }
         when (state) {
             DetectionState.SHORTFORM_ESTIMATED -> open.watchMs += c
             DetectionState.TEMPORARILY_OBSCURED ->
@@ -276,6 +288,7 @@ class ShortformStateMachine(private val tuning: DetectionTuning = DetectionTunin
     private fun endSession(atMs: Long, reason: EndReason, cause: ExitCause?): SessionSummary {
         val open = checkNotNull(session)
         session = null
+        watchHold = false
         if (reason == EndReason.EXIT_CONFIRMED && tuning.sessionResumeWindowMs > 0) {
             resumable = open
             resumableEndedAt = atMs

@@ -6,4 +6,10 @@
     <color name="popup_text_secondary">#FF5F6368</color>
     <color name="popup_accent">#FF3D5AFE</color>
     <color name="popup_on_accent">#FFFFFFFF</color>
+    <color name="popup_option_bg">#FFEEF0F4</color>
+    <color name="popup_character">#FFC5CAE9</color>
+    <!-- Lv.3 숨 고르기: 모드와 무관하게 어둡게 덮는다 -->
+    <color name="breathing_scrim">#E6000000</color>
+    <color name="breathing_text">#FFFFFFFF</color>
+    <color name="breathing_text_secondary">#FFD0D3D8</color>
 </resources>

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 서비스 Context 로 inflate 하므로 AppCompat 위젯·테마 속성에 기대지 않는다 -->
+    <style name="PopupButton">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/popup_button_height</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">@dimen/popup_button_padding</item>
+        <item name="android:paddingEnd">@dimen/popup_button_padding</item>
+        <item name="android:textSize">@dimen/popup_button_text</item>
+    </style>
+
+    <style name="PopupButton.Primary">
+        <item name="android:background">@drawable/bg_popup_button</item>
+        <item name="android:textColor">@color/popup_on_accent</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="PopupButton.Secondary">
+        <item name="android:background">@drawable/bg_popup_option</item>
+        <item name="android:textColor">@color/popup_text</item>
+    </style>
+
+    <style name="PopupOption">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">@dimen/popup_option_height</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:background">@drawable/bg_popup_option</item>
+        <item name="android:clickable">true</item>
+        <item name="android:focusable">true</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">@color/popup_text</item>
+        <item name="android:textSize">@dimen/popup_button_text</item>
+    </style>
+</resources>

@@ -6,6 +6,7 @@ package com.example.shortsdetector.intervention
  *  - 기준: 세션 하나 안의 확정 시청시간([thresholdMs] 이상). 일 누적은 아직 없다.
  *  - 세션당 한 번만 판정한다. 기준을 넘는 순간 쿨다운에 걸리면 그 세션은 다시 알리지 않는다
  *    (기존 "세션 시작 시 1회 + 쿨다운" 동작과 같은 의미. thresholdMs = 0 이면 완전히 같다).
+ *  - 예외: 사용자가 더 보기를 고르면 [rearm] 으로 같은 세션에서 한 번 더 판정한다.
  */
 class WatchThresholdPolicy(thresholdMs: Long) {
 
@@ -15,11 +16,26 @@ class WatchThresholdPolicy(thresholdMs: Long) {
     /** 이미 판정을 끝낸(알렸거나 쿨다운으로 생략한) 세션 번호 */
     private var decidedSession: Int? = null
 
+    /** 판정이 끝난 세션을 다시 판정할 시청시간. 쓰고 나면 지운다. */
+    private var rearmAtWatchMs: Long? = null
+
+    /** 판정이 끝난 세션이 [atWatchMs] 에 닿으면 한 번 더 판정한다. 다른 세션이면 무시한다. */
+    fun rearm(sessionNumber: Int, atWatchMs: Long) {
+        if (sessionNumber == decidedSession) rearmAtWatchMs = atWatchMs
+    }
+
     /** 이번 관찰에서 이 세션에 대해 판정해야 하면 true. true 를 돌려주면 그 세션은 판정 완료로 기록한다. */
     fun shouldDecide(sessionNumber: Int?, watchMs: Long): Boolean {
-        if (sessionNumber == null || sessionNumber == decidedSession) return false
+        if (sessionNumber == null) return false
+        if (sessionNumber == decidedSession) {
+            val at = rearmAtWatchMs ?: return false
+            if (watchMs < at) return false
+            rearmAtWatchMs = null
+            return true
+        }
         if (watchMs < thresholdMs) return false
         decidedSession = sessionNumber
+        rearmAtWatchMs = null
         return true
     }
 }

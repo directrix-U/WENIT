@@ -3,12 +3,11 @@ package com.example.shortsdetector.data
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import com.example.shortsdetector.DetectionConfig
 import com.example.shortsdetector.detection.adapters.instagram.InstagramReelsAdapter
 import com.example.shortsdetector.detection.adapters.youtube.YouTubeViewIds
 
 /**
- * 사용자 감지 설정: 대상 앱 on/off, 개입 임계값, 화면 중앙 팝업 사용 여부.
+ * 사용자 감지 설정: 대상 앱 on/off, 화면 중앙 팝업 사용 여부. 개입 임계값은 개입 정책으로 옮겼다.
  *
  * YouTube 는 기존 동작과 같게 기본 켜짐, Instagram 은 규칙이 실기기 미검증이라 기본 꺼짐.
  */
@@ -17,7 +16,8 @@ object DetectionPreferences {
     private const val FILE = "detection_settings"
     const val KEY_YOUTUBE_ENABLED = "youtube_enabled"
     const val KEY_INSTAGRAM_ENABLED = "instagram_enabled"
-    const val KEY_WATCH_THRESHOLD_MS = "watch_threshold_ms"
+    /** 예전 임계값 저장 키. [InterventionPolicyPreferences] 가 정책으로 한 번 옮기고 지운다. */
+    const val LEGACY_KEY_WATCH_THRESHOLD_MS = "watch_threshold_ms"
     const val KEY_POPUP_ENABLED = "popup_enabled"
 
     fun prefs(context: Context): SharedPreferences =
@@ -34,15 +34,6 @@ object DetectionPreferences {
 
     fun setInstagramEnabled(context: Context, enabled: Boolean) =
         prefs(context).edit { putBoolean(KEY_INSTAGRAM_ENABLED, enabled) }
-
-    /** 저장값이 선택지에 없으면(구버전·손상) 기본값으로 돌린다. */
-    fun watchThresholdMs(context: Context): Long {
-        val v = prefs(context).getLong(KEY_WATCH_THRESHOLD_MS, DetectionConfig.DEFAULT_WATCH_THRESHOLD_MS)
-        return if (v in DetectionConfig.WATCH_THRESHOLD_CHOICES_MS) v else DetectionConfig.DEFAULT_WATCH_THRESHOLD_MS
-    }
-
-    fun setWatchThresholdMs(context: Context, ms: Long) =
-        prefs(context).edit { putLong(KEY_WATCH_THRESHOLD_MS, ms) }
 
     /** 끄면 팝업 없이 시스템 알림만 쓴다. */
     fun isPopupEnabled(context: Context): Boolean =

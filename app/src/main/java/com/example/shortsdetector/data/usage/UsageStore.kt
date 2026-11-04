@@ -18,6 +18,12 @@ interface UsageStore {
     /** 이미 결과가 기록된 개입은 바꾸지 않는다(첫 결과만 남김). */
     fun setInterventionOutcome(id: String, outcome: InterventionOutcome, reason: InterventionUserReason?)
 
+    /**
+     * 보여 줬지만 결과가 없는 개입을 IGNORED 로 닫는다(프로세스 종료 등으로 끝맺지 못한 경우). 닫은 개수를 돌려준다.
+     * 쿨다운·상한으로 생략했거나 실패한 기록, 단계 개념이 없던 DB 버전 1 기록은 건드리지 않는다.
+     */
+    fun ignoreUnansweredInterventions(): Int
+
     /** 같은 id 가 있으면 무시한다. */
     fun insertPolicyChange(record: PolicyChangeRecord)
 
@@ -67,6 +73,13 @@ class InMemoryUsageStore : UsageStore {
     ) {
         val r = interventions[id] ?: return
         if (r.outcome == null) interventions[id] = r.copy(outcome = outcome, userReason = reason)
+    }
+
+    @Synchronized override fun ignoreUnansweredInterventions(): Int {
+        val shown = setOf(InterventionMethod.POPUP, InterventionMethod.NOTIFICATION)
+        val open = interventions.values.filter { it.outcome == null && it.level != null && it.method in shown }
+        open.forEach { interventions[it.id] = it.copy(outcome = InterventionOutcome.IGNORED) }
+        return open.size
     }
 
     @Synchronized override fun insertPolicyChange(record: PolicyChangeRecord) {

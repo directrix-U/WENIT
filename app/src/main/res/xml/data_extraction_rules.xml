@@ -9,6 +9,7 @@
         <exclude domain="sharedpref" path="user_profile.xml" />
         <exclude domain="sharedpref" path="user_goals.xml" />
         <exclude domain="sharedpref" path="intervention_policy.xml" />
+        <exclude domain="sharedpref" path="saved_time_baseline.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="wenit_usage.db" />
@@ -18,5 +19,6 @@
         <exclude domain="sharedpref" path="user_profile.xml" />
         <exclude domain="sharedpref" path="user_goals.xml" />
         <exclude domain="sharedpref" path="intervention_policy.xml" />
+        <exclude domain="sharedpref" path="saved_time_baseline.xml" />
     </device-transfer>
 </data-extraction-rules>

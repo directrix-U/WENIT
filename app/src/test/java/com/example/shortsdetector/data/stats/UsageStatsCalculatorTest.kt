@@ -103,7 +103,7 @@ class UsageStatsCalculatorTest {
         val late = session(at(thursday, 20, 30), 2 * minute)
         val t = UsageStatsCalculator.today(sessions + late, emptyList(), goals, zone, laterNow)
         assertEquals(
-            listOf(GoalStatus.IN_PROGRESS, GoalStatus.EXCEEDED, GoalStatus.EXCEEDED),
+            listOf(GoalStatus.ON_TRACK, GoalStatus.EXCEEDED, GoalStatus.EXCEEDED),
             t.goals.map { it.status }
         )
         assertEquals(listOf(22, 15, 2), t.goals.map { it.currentValue })
@@ -114,7 +114,7 @@ class UsageStatsCalculatorTest {
         val goals = listOf(GoalRules.userGoal(GoalType.SELF_STOPS, 1), GoalRules.userGoal(GoalType.DAILY_OPENS, 1))
         val list = listOf(intervention(at(thursday, 9), outcome = InterventionOutcome.STOPPED))
         val t = UsageStatsCalculator.today(listOf(session(at(thursday, 9), minute)), list, goals, zone, now)
-        assertEquals(listOf(GoalStatus.ACHIEVED, GoalStatus.IN_PROGRESS), t.goals.map { it.status })
+        assertEquals(listOf(GoalStatus.ACHIEVED, GoalStatus.ON_TRACK), t.goals.map { it.status })
     }
 
     @Test

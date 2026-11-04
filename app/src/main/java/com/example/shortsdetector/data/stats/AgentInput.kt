@@ -11,7 +11,7 @@ import java.time.ZoneId
 /**
  * 나중에 AI 입력으로 직렬화할 묶음. 집계값·설문 응답·목표·정책만 담는다.
  *
- * 세션/개입 원본 기록, 패키지 이름, 화면 원문·노드·영상 정보는 넣지 않는다.
+ * 세션/개입 원본 기록, 패키지 이름, 화면 원문·노드·영상 정보는 넣지 않는다. 시연 모드 기록도 뺀다.
  * 새 필드를 추가하면 AgentInputPrivacyTest 의 허용 타입 검사를 통과해야 한다.
  * 프로필은 설문 미완료면 null 이다. 외부로 보내기 전에 명세 7장의 고지·동의가 필요하다.
  */
@@ -45,6 +45,6 @@ object AgentInputBuilder {
         policy = policy,
         today = UsageStatsCalculator.today(sessions, interventions, goals, zone, nowMs),
         week = UsageStatsCalculator.week(sessions, interventions, zone, nowMs),
-        recentPolicyChanges = recentPolicyChanges
+        recentPolicyChanges = recentPolicyChanges.filterNot { it.isDemo }
     )
 }

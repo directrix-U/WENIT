@@ -5,9 +5,11 @@ import java.time.LocalDate
 import java.time.ZoneId
 
 enum class GoalStatus {
+    /** 지키는 중. 아직 하루가 끝나지 않았다. */
+    ON_TRACK,
+    /** 하루 종료 후 지켰음이 확정. SELF_STOPS 는 횟수를 채운 즉시. */
     ACHIEVED,
-    IN_PROGRESS,
-    /** 제한형 목표를 넘겼다. */
+    /** 제한형 목표를 넘겼다. 하루 중에도 확정이다. */
     EXCEEDED,
     /** 하루가 끝났는데 SELF_STOPS 횟수를 못 채웠다. 넘긴 것이 아니어서 [EXCEEDED] 와 구분한다. */
     MISSED
@@ -30,7 +32,7 @@ data class GoalProgress(val goal: Goal, val currentValue: Int, val status: GoalS
  * 목표별 달성 상태. 순수 함수.
  *
  * 제한형(시간·횟수 상한)은 하루가 끝나야 지켰다고 말할 수 있다. 그래서 그날이 진행 중이면 넘기기 전까지
- * [GoalStatus.IN_PROGRESS] 이고, [GoalStatus.ACHIEVED] 는 dayFinished = true 일 때만 나온다.
+ * [GoalStatus.ON_TRACK] 이고, [GoalStatus.ACHIEVED] 는 dayFinished = true 일 때만 나온다.
  * SELF_STOPS 는 횟수를 채우는 즉시 ACHIEVED 다. 상한과 정확히 같은 값은 넘긴 것이 아니다.
  */
 object GoalProgressCalculator {
@@ -52,7 +54,7 @@ object GoalProgressCalculator {
                 when {
                     metrics.selfStopCount >= goal.value -> GoalStatus.ACHIEVED
                     dayFinished -> GoalStatus.MISSED
-                    else -> GoalStatus.IN_PROGRESS
+                    else -> GoalStatus.ON_TRACK
                 }
             )
         }
@@ -63,7 +65,7 @@ object GoalProgressCalculator {
     private fun limitStatus(exceeded: Boolean, dayFinished: Boolean) = when {
         exceeded -> GoalStatus.EXCEEDED
         dayFinished -> GoalStatus.ACHIEVED
-        else -> GoalStatus.IN_PROGRESS
+        else -> GoalStatus.ON_TRACK
     }
 
     private fun ceilMinutes(ms: Long): Int = ((ms + MS_PER_MINUTE - 1) / MS_PER_MINUTE).toInt()

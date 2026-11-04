@@ -5,4 +5,6 @@
     <color name="popup_text_secondary">#FFB5B8BD</color>
     <color name="popup_accent">#FF8C9EFF</color>
     <color name="popup_on_accent">#FF10132B</color>
+    <color name="popup_option_bg">#FF3A3A40</color>
+    <color name="popup_character">#FF5C6BC0</color>
 </resources>

@@ -43,4 +43,28 @@ class WatchThresholdPolicyTest {
         p.thresholdMs = 60_000
         assertTrue(p.shouldDecide(1, 120_000))
     }
+
+    @Test
+    fun `rearm decides once more at the given watch time and stays spent`() {
+        val p = WatchThresholdPolicy(60_000)
+        assertTrue(p.shouldDecide(1, 60_000))
+        p.rearm(1, 360_000)
+        assertFalse(p.shouldDecide(1, 359_999))
+        assertTrue(p.shouldDecide(1, 360_000))
+        assertFalse(p.shouldDecide(1, 999_000))
+    }
+
+    @Test
+    fun `rearm before a decision or for another session does nothing, and a new session clears it`() {
+        val p = WatchThresholdPolicy(60_000)
+        p.rearm(1, 1_000)
+        assertFalse(p.shouldDecide(1, 1_000))
+        assertTrue(p.shouldDecide(1, 60_000))
+        p.rearm(2, 61_000)
+        assertFalse(p.shouldDecide(1, 61_000))
+
+        p.rearm(1, 70_000)
+        assertTrue(p.shouldDecide(2, 60_000))
+        assertFalse(p.shouldDecide(2, 70_000))
+    }
 }

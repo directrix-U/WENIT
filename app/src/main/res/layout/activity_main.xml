@@ -125,6 +125,21 @@
             android:layout_marginTop="8dp"
             android:text="@string/switch_popup" />
 
+        <!-- 임시 스위치. 정식 설정 화면은 Compose 단계에서 만든다 -->
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchDemoMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/switch_demo_mode" />
+
+        <TextView
+            android:id="@+id/textPolicyStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

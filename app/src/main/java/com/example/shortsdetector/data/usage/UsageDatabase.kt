@@ -21,11 +21,13 @@ class UsageDatabase private constructor(context: Context) :
         // 새 설치도 업그레이드와 같은 경로를 지나게 해 두 스키마가 갈라지지 않게 한다.
         UsageSchema.CREATE_V1.forEach(db::execSQL)
         UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
+        UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
     }
 
     /** SQLiteOpenHelper 가 트랜잭션으로 감싸 호출한다. 기존 기록은 지우지 않는다. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
+        if (oldVersion < 3) UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
     }
 
     override fun upsertSession(record: SessionRecord) {
@@ -61,6 +63,7 @@ class UsageDatabase private constructor(context: Context) :
             put("level", record.level)
             put("user_reason", record.userReason?.name)
             put("outcome", record.outcome?.name)
+            put("is_demo", if (record.isDemo) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("interventions", null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
@@ -92,6 +95,7 @@ class UsageDatabase private constructor(context: Context) :
             put("input_summary", record.inputSummary)
             put("status", record.status.name)
             put("model_id", record.modelId)
+            put("is_demo", if (record.isDemo) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("policy_changes", null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
@@ -99,6 +103,15 @@ class UsageDatabase private constructor(context: Context) :
     override fun setPolicyChangeStatus(id: String, status: PolicyChangeStatus) {
         val v = ContentValues().apply { put("status", status.name) }
         writableDatabase.update("policy_changes", v, "id = ?", arrayOf(id))
+    }
+
+    override fun ignoreUnansweredInterventions(): Int {
+        val v = ContentValues().apply { put("outcome", InterventionOutcome.IGNORED.name) }
+        return writableDatabase.update(
+            "interventions", v,
+            "outcome IS NULL AND level IS NOT NULL AND method IN (?, ?)",
+            arrayOf(InterventionMethod.POPUP.name, InterventionMethod.NOTIFICATION.name)
+        )
     }
 
     override fun abortOpenSessions(): Int {
@@ -190,7 +203,8 @@ class UsageDatabase private constructor(context: Context) :
         actionAtMs = longOrNull("action_at_ms"),
         level = longOrNull("level")?.toInt(),
         userReason = str("user_reason")?.let { r -> InterventionUserReason.entries.firstOrNull { it.name == r } },
-        outcome = str("outcome")?.let { o -> InterventionOutcome.entries.firstOrNull { it.name == o } }
+        outcome = str("outcome")?.let { o -> InterventionOutcome.entries.firstOrNull { it.name == o } },
+        isDemo = long("is_demo") != 0L
     )
 
     /** 새 정책 값을 읽을 수 없는 행은 건너뛴다. */
@@ -205,7 +219,8 @@ class UsageDatabase private constructor(context: Context) :
             reasonText = str("reason_text").orEmpty(),
             inputSummary = str("input_summary"),
             status = enumOr(str("status"), PolicyChangeStatus.REJECTED_OUT_OF_RANGE),
-            modelId = str("model_id")
+            modelId = str("model_id"),
+            isDemo = long("is_demo") != 0L
         )
     }
 

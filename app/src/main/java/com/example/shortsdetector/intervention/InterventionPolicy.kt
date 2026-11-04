@@ -19,13 +19,17 @@ data class InterventionPolicy(
     /** 몇 번 연속 스스로 멈추면 한 단계 내리는가 */
     val deescalateAfterStops: Int = 2,
     val cooldownMs: Long = DetectionConfig.MIN_RENOTIFY_INTERVAL_MS,
-    val maxDailyInterventions: Int = 10
+    val maxDailyInterventions: Int = 10,
+    /** 올라갈 수 있는 최대 단계. 2 면 전체 화면 숨 고르기(Lv.3)를 쓰지 않는다. */
+    val maxLevel: Int = InterventionPolicyBounds.MAX_LEVEL
 ) {
     /** 모든 값을 하드 범위 안으로 자른다. */
     fun clamped(): InterventionPolicy = InterventionPolicyBounds.run {
+        val top = maxLevel.coerceIn(MAX_LEVEL_SETTING)
         copy(
             thresholdMs = thresholdMs.coerceIn(THRESHOLD_MS),
-            level = level.coerceIn(MIN_LEVEL, MAX_LEVEL),
+            level = level.coerceIn(MIN_LEVEL, top),
+            maxLevel = top,
             escalateAfterSkips = escalateAfterSkips.coerceIn(ESCALATE_AFTER_SKIPS),
             deescalateAfterStops = deescalateAfterStops.coerceIn(DEESCALATE_AFTER_STOPS),
             cooldownMs = cooldownMs.coerceIn(COOLDOWN_MS),
@@ -53,6 +57,9 @@ object InterventionPolicyBounds {
     const val MIN_LEVEL = 1
     const val MAX_LEVEL = 3
 
+    /** 정책의 최대 단계로 고를 수 있는 값 */
+    val MAX_LEVEL_SETTING = 2..MAX_LEVEL
+
     /** 하한은 기존 임계값 선택지의 최솟값(30초)과 같다. */
     val THRESHOLD_MS = 30_000L..3_600_000L
     val ESCALATE_AFTER_SKIPS = 1..10
@@ -75,7 +82,8 @@ object InterventionPolicyCodec {
         "escalateAfterSkips" to p.escalateAfterSkips,
         "deescalateAfterStops" to p.deescalateAfterStops,
         "cooldownMs" to p.cooldownMs,
-        "maxDailyInterventions" to p.maxDailyInterventions
+        "maxDailyInterventions" to p.maxDailyInterventions,
+        "maxLevel" to p.maxLevel
     ).joinToString(";") { (k, v) -> "$k=$v" }
 
     /** 없는 항목은 기본값으로 채운다(나중에 필드가 늘어도 옛 기록을 읽기 위함). 읽을 항목이 하나도 없으면 null. */
@@ -94,7 +102,21 @@ object InterventionPolicyCodec {
             escalateAfterSkips = int("escalateAfterSkips", d.escalateAfterSkips),
             deescalateAfterStops = int("deescalateAfterStops", d.deescalateAfterStops),
             cooldownMs = values["cooldownMs"] ?: d.cooldownMs,
-            maxDailyInterventions = int("maxDailyInterventions", d.maxDailyInterventions)
+            maxDailyInterventions = int("maxDailyInterventions", d.maxDailyInterventions),
+            maxLevel = int("maxLevel", d.maxLevel)
         )
     }
 }
+
+/**
+ * 판정에 쓸 최종 값.
+ * @param policy 시연 모드면 시연 값을 덧씌운 정책
+ * @param thresholdMs PER_SESSION 목표까지 반영한 기준 시간
+ * @param demoRunId 시연 모드를 켠 시각. 켤 때마다 바뀌어 시연 전용 하루 카운터를 초기화하는 기준이 된다. 시연이 아니면 null.
+ */
+data class ResolvedPolicy(
+    val policy: InterventionPolicy,
+    val thresholdMs: Long,
+    val demoMode: Boolean,
+    val demoRunId: Long? = null
+)

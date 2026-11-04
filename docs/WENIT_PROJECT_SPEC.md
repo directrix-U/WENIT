@@ -23,6 +23,7 @@
 4. 1차 버전은 영상·오디오·스크린샷·원본 UI 텍스트를 저장하거나 외부로 전송하지 않는다. UI 값은 필요할 때 기기 내에서 잠깐 분석하고 폐기하며, 저장하는 것은 최소한의 구조적 특징과 이벤트 메타데이터다.
 5. 불확실하면 공격적으로 개입하지 않는다. 불확실 상태에서는 관찰을 계속하거나 사용자가 직접 표시할 수 있게 한다.
 6. 첫 개입은 사용자에게 허용된 알림을 기본으로 하고, 앱이 강제로 다른 앱 위에 화면을 덮거나 자동으로 Activity를 실행하지 않는다. 직접 오버레이는 정책·플랫폼·사용성 검토를 통과한 뒤 별도 결정한다.
+   - MVP 결정(2026-11-05): 발표 시연용 MVP 는 Lv.1·2 팝업과 Lv.3 전체 화면을 쓴다. Lv.3 은 10초 한정 화면 덮기이고 홈·뒤로가기로 이탈할 수 있다. 출시 전 Play 정책을 재검토한다(5.1a).
 7. 에이전트는 측정 가능한 데이터 위에서만 동작한다. 감지 품질과 개입 결과(반응·이탈·피드백)를 기록·측정할 수 있게 된 뒤에 에이전트를 붙이고, 에이전트가 정책을 바꾼 효과도 같은 지표로 평가한다.
 
 ## 1. 제품 정의
@@ -194,7 +195,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `final_state`: estimated / uncertain / ended / aborted
 - `detector_version`
 - `estimated_watch_ms`: 확정 추정 시청시간
-- `obscured_ms`: 일시 가림으로 별도 처리한 시간
+- `obscured_ms`: 일시 가림으로 별도 처리한 시간. Lv.3 카운트다운 시간도 시청시간에서 빼고 여기에 넣는다
 - `max_confidence_bucket`
 - `end_reason_code`
 
@@ -218,7 +219,9 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `cooldown_suppressed`: boolean
 - `level`: 개입 시점 단계 1~3 (DB 버전 1 기록은 null)
 - `user_reason`: fun / bored / tired / procrastinating / null
-- `outcome`: stopped / continued / ignored / null
+- `outcome`: stopped / continued / ignored / null (서비스 시작 시 보여 줬지만 결과 없는 개입은 ignored 로 정리. DB 버전 1 기록은 null 유지)
+- `method`: popup / notification / failed / suppressed_by_cooldown / suppressed_by_daily_limit
+- `is_demo`: boolean. 시연 모드 기록은 통계와 에이전트 입력에서 기본 제외
 
 ### `FeedbackEvent`
 - `feedback_id`: UUID
@@ -236,6 +239,23 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `input_summary`: 에이전트가 본 집계 범위(기간·지표 이름). 원문 없음
 - `status`: applied / rejected_out_of_range / pending_approval / reverted_by_user
 - `model_id`(에이전트일 때)
+- `is_demo`: boolean
+
+### `InterventionPolicy`
+- `threshold_ms`: 개입 기준 시간의 유일한 저장 위치. 판정에는 PER_SESSION 목표를 반영한 값을 쓴다
+- `level`: 현재 단계
+- `max_level`: 2 또는 3, 기본 3. 2 면 Lv.3 을 쓰지 않는다
+- `escalate_after_skips`, `deescalate_after_stops`, `cooldown_ms`, `max_daily_interventions`
+- 시연 모드 값은 저장값 위에 덧씌워 계산만 하고 저장하지 않는다. 하루 상한도 시연 전용 카운터를 쓰고 시연 모드를 켤 때 초기화한다
+
+### `UserProfile`
+- 나이대, 성별(기본 응답 안 함), 주로 보는 숏폼·시간대·요일, 평소 하루 시청 시간, AI 추천 사용 동의(기본 false)
+
+### `Goal`
+- `type`: daily_total / per_session / time_window / daily_opens / self_stops. 유형당 1개, 최대 3개
+- `value`, `label`, `reason`, `source`(ai / preset / user)
+- 상태: on_track / exceeded(하루 중 확정) / achieved(하루 종료 후) / missed
+- 한계: 목표 변경 이력을 저장하지 않으므로 어제 결과는 현재 목표 기준으로 계산한다. 어제 없던 목표도 어제 기록으로 판정된다
 
 ### `UserSettings`
 - 대상 앱 활성화 여부
@@ -262,6 +282,14 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - 알림 권한이 꺼져 있으면 실패를 명시하고, 권한을 다시 켜는 안내를 제공한다. 권한 없이 다른 방식으로 몰래 우회하지 않는다.
 - 같은 세션·쿨다운 구간에서 중복 알림을 보내지 않는다.
 - 사용자가 일시중지하거나 규칙을 조정할 수 있게 한다.
+
+### 5.1a 단계별 개입
+
+- Lv.1 가벼운 알림 → Lv.2 성찰 질문 → Lv.3 숨 고르기. 단계 변경은 결정론적 규칙이 하고 `PolicyChange(source=rule)` 로 기록한다.
+- MVP: Lv.3 은 10초 한정 화면 덮기이고 홈·뒤로가기로 이탈할 수 있다. 출시 전 Play 정책을 재검토한다.
+- 10초 뒤 버튼으로 닫을 수 있고, 답이 없으면 30초 뒤 스스로 닫히며(ignored), 카운트다운 시간은 시청시간에서 뺀다.
+- 이탈 신호가 처음 잡히면 세션 종료 판정을 기다리지 않고 오버레이만 닫는다. 세션 종료 판정은 바뀌지 않는다.
+- 정책의 `max_level` 을 2 로 두면 Lv.3 을 쓰지 않는다.
 
 ### 5.2 개입 후 화면
 

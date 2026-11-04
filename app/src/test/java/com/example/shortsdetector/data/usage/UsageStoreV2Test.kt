@@ -102,7 +102,6 @@ class UsageStoreV2Test {
     @Test
     fun `migration only adds, and new columns have no invented default`() {
         val sql = UsageSchema.MIGRATE_1_TO_2.joinToString("\n").uppercase()
-        assertEquals(2, UsageSchema.VERSION)
         for (word in listOf("DROP", "DELETE", "UPDATE", "DEFAULT", "RENAME")) assertFalse(word, word in sql)
     }
 }

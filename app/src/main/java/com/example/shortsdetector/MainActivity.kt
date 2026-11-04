@@ -15,11 +15,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.example.shortsdetector.data.DetectionPreferences
+import com.example.shortsdetector.data.InterventionPolicyPreferences
+import com.example.shortsdetector.data.stats.SavedTimeBaselinePreferences
 import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.InterventionAction
 import com.example.shortsdetector.data.usage.UsageDatabase
+import com.example.shortsdetector.intervention.InterventionCoordinator
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.UUID
 import java.util.concurrent.Executors
 import com.example.shortsdetector.databinding.ActivityMainBinding
 import com.example.shortsdetector.platform.DetectionStatus
@@ -29,7 +33,7 @@ import com.example.shortsdetector.platform.DetectionStatus
  *  - 접근성 서비스 활성화 상태 표시 + 설정 화면으로 이동
  *  - Android 13+ 알림 권한 요청
  *  - 감지 대상 앱 선택(YouTube 기본 켜짐, Instagram 실험적·기본 꺼짐)
- *  - 개입 임계값(얼마나 본 뒤 알릴지)과 화면 중앙 팝업 사용 여부
+ *  - 개입 기준 시간(정책 값)과 화면 중앙 팝업 사용 여부, 임시 시연 모드 스위치
  *  - 개입 팝업을 누르면 이 화면으로 온다([EXTRA_FROM_INTERVENTION])
  *  - 서비스가 연결된 경우에만 현재 감지 상태 표시
  *  - 사용 기록: 오늘 집계 한 줄 + 전체 삭제(확인 대화상자). 통계 화면은 다음 단계.
@@ -132,6 +136,7 @@ class MainActivity : AppCompatActivity() {
             .setPositiveButton(R.string.dialog_delete) { _, _ ->
                 runIo {
                     UsageDatabase.get(this).deleteAll()
+                    SavedTimeBaselinePreferences.clear(this)
                     runOnUiThread {
                         if (isDestroyed) return@runOnUiThread
                         Toast.makeText(this, R.string.toast_records_deleted, Toast.LENGTH_SHORT).show()
@@ -161,7 +166,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupInterventionSettings() {
-        val current = DetectionPreferences.watchThresholdMs(this)
+        val current = InterventionPolicyPreferences.load(this).thresholdMs
         DetectionConfig.WATCH_THRESHOLD_CHOICES_MS.forEachIndexed { i, ms ->
             val label = ShortsNotifier.formatWatch(this, ms)
             val button = RadioButton(this).apply {
@@ -170,7 +175,7 @@ class MainActivity : AppCompatActivity() {
                 text = if (i == 0) getString(R.string.threshold_test_suffix, label) else label
                 isChecked = ms == current
                 setOnCheckedChangeListener { _, checked ->
-                    if (checked) DetectionPreferences.setWatchThresholdMs(this@MainActivity, ms)
+                    if (checked) changeThreshold(ms)
                 }
             }
             binding.groupThreshold.addView(button)
@@ -180,6 +185,23 @@ class MainActivity : AppCompatActivity() {
             DetectionPreferences.setPopupEnabled(this, checked)
             refreshStatus()
         }
+        // 정식 설정 화면은 Compose 단계에서 만든다. 켤 때마다 시연용 단계가 Lv.1 부터 시작한다.
+        binding.switchDemoMode.isChecked = InterventionPolicyPreferences.isDemoMode(this)
+        binding.switchDemoMode.setOnCheckedChangeListener { _, checked ->
+            InterventionPolicyPreferences.setDemoMode(this, checked)
+            refreshStatus()
+        }
+    }
+
+    /** 사용자가 바꾼 기준 시간은 정책에 저장하고 source=USER 로 기록한다. */
+    private fun changeThreshold(ms: Long) {
+        val before = InterventionPolicyPreferences.load(this)
+        val change = InterventionCoordinator.userThresholdChange(
+            before, ms, UUID.randomUUID().toString(), System.currentTimeMillis(),
+            getString(R.string.policy_reason_user_threshold)
+        ) ?: return
+        InterventionPolicyPreferences.save(this, change.newPolicy)
+        runIo { UsageDatabase.get(this).insertPolicyChange(change) }
     }
 
     override fun onResume() {
@@ -211,6 +233,13 @@ class MainActivity : AppCompatActivity() {
                 getString(R.string.status_detection_detail, status.state.name, status.reason.name)
             else -> getString(R.string.status_detection, status.state.name)
         }
+
+        val policy = InterventionPolicyPreferences.resolve(this)
+        binding.textPolicyStatus.text = getString(
+            if (policy.demoMode) R.string.status_policy_demo else R.string.status_policy,
+            policy.policy.level,
+            ShortsNotifier.formatWatch(this, policy.thresholdMs)
+        )
 
         binding.textHint.text = when {
             !accessibilityOn -> getString(R.string.hint_enable_accessibility)

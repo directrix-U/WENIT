@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Lv.3 숨 고르기. 화면 전체를 어둡게 덮는다. clickable 은 카운트다운 동안 터치를 아래 앱으로 넘기지 않기 위함이다.
+  10초 뒤 popupButtons 가 보인다(InterventionPopup).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/breathing_scrim"
+    android:clickable="true"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:padding="@dimen/popup_padding">
+
+    <ImageView
+        android:id="@+id/popupCharacter"
+        android:layout_width="@dimen/breathing_character_size"
+        android:layout_height="@dimen/breathing_character_size"
+        android:contentDescription="@string/popup_character_description"
+        android:src="@drawable/ic_character_placeholder" />
+
+    <TextView
+        android:id="@+id/popupTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/popup_section_gap"
+        android:gravity="center"
+        android:textColor="@color/breathing_text"
+        android:textSize="@dimen/breathing_title_text"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/popupBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/popup_option_gap"
+        android:gravity="center"
+        android:textColor="@color/breathing_text_secondary"
+        android:textSize="@dimen/popup_body_text" />
+
+    <TextView
+        android:id="@+id/breathingCount"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/popup_section_gap"
+        android:textColor="@color/breathing_text"
+        android:textSize="@dimen/breathing_count_text" />
+
+    <LinearLayout
+        android:id="@+id/popupButtons"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/popup_section_gap"
+        android:orientation="horizontal"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/popupContinue"
+            style="@style/PopupButton.Secondary"
+            android:text="@string/popup_lv3_continue" />
+
+        <TextView
+            android:id="@+id/popupStop"
+            style="@style/PopupButton.Primary"
+            android:layout_marginStart="@dimen/popup_option_gap"
+            android:text="@string/popup_lv3_stop" />
+    </LinearLayout>
+</LinearLayout>

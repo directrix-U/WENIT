@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 개입 팝업 크기. 디자인이 정해지면 여기와 colors.xml, strings.xml 만 바꾼다 -->
+    <dimen name="popup_max_width">360dp</dimen>
+    <dimen name="popup_padding">24dp</dimen>
+    <dimen name="popup_character_size">72dp</dimen>
+    <dimen name="popup_button_height">48dp</dimen>
+    <dimen name="popup_button_padding">18dp</dimen>
+    <dimen name="popup_option_height">44dp</dimen>
+    <dimen name="popup_option_gap">8dp</dimen>
+    <dimen name="popup_section_gap">18dp</dimen>
+    <dimen name="popup_corner_radius">20dp</dimen>
+    <dimen name="popup_button_radius">12dp</dimen>
+    <dimen name="popup_title_text">19sp</dimen>
+    <dimen name="popup_body_text">15sp</dimen>
+    <dimen name="popup_button_text">15sp</dimen>
+    <dimen name="breathing_character_size">120dp</dimen>
+    <dimen name="breathing_title_text">24sp</dimen>
+    <dimen name="breathing_count_text">56sp</dimen>
+</resources>

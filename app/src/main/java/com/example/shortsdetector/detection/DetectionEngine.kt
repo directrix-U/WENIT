@@ -17,6 +17,7 @@ import com.example.shortsdetector.detection.model.WindowStatus
 import com.example.shortsdetector.detection.state.DetectionTuning
 import com.example.shortsdetector.detection.state.ShortformStateMachine
 import com.example.shortsdetector.detection.state.Step
+import com.example.shortsdetector.intervention.DailyInterventionLimit
 import com.example.shortsdetector.intervention.NotificationGate
 import com.example.shortsdetector.intervention.WatchThresholdPolicy
 
@@ -30,8 +31,12 @@ data class EngineOutput(
     val notifyWatchMs: Long? = null,
     /** 임계값에 닿았지만 쿨다운 때문에 개입을 생략했다(로그용) */
     val suppressedByCooldown: Boolean = false,
+    /** 임계값에 닿았지만 오늘 개입 수가 상한에 닿아 생략했다 */
+    val suppressedByDailyLimit: Boolean = false,
     /** 세션이 끝났다 → 떠 있는 감지 알림을 지워라 */
-    val cancelNotification: Boolean = false
+    val cancelNotification: Boolean = false,
+    /** 이번 관찰에서 이탈 신호가 처음 잡혔다 → 세션 종료 판정과 별개로 개입 오버레이를 닫아라 */
+    val exitSignalStarted: Boolean = false
 ) {
     val endedSession: SessionSummary? get() = step.endedSession
 }
@@ -49,18 +54,49 @@ class DetectionEngine(
     adapters: List<ShortformAdapter>,
     renotifyIntervalMs: Long,
     /** 세션 안에서 이만큼 본 뒤에 개입한다. 0 이면 세션 시작 즉시(기존 동작). */
-    watchThresholdMs: Long = 0L
+    watchThresholdMs: Long = 0L,
+    maxDailyInterventions: Int = Int.MAX_VALUE,
+    /** 지금의 현지 날짜(epoch day). 엔진 시각은 elapsed 라 날짜를 알 수 없어 주입받는다. */
+    private val currentDay: () -> Long = { 0L }
 ) {
     private val adaptersByPackage = adapters.associateBy { it.packageName }
     private val scrollTracker = ScrollSignalTracker()
     private val machine = ShortformStateMachine(tuning)
     private val gate = NotificationGate(renotifyIntervalMs)
     private val thresholdPolicy = WatchThresholdPolicy(watchThresholdMs)
+    private val dailyLimit = DailyInterventionLimit(maxDailyInterventions)
+    private val demoLimit = DailyInterventionLimit(maxDailyInterventions)
+    private var demoRunId: Long? = null
+
+    /** 시연 모드면 시연 전용 카운터를 쓴다. 시연 개입이 실제 하루 상한을 소모하지 않는다. */
+    private val activeLimit get() = if (demoRunId != null) demoLimit else dailyLimit
 
     /** 개입 임계값. 설정이 바뀌면 바로 반영한다(열린 세션에도 적용). */
     var watchThresholdMs: Long
         get() = thresholdPolicy.thresholdMs
         set(value) { thresholdPolicy.thresholdMs = value }
+
+    /** 정책 값을 반영한다. 다음 판정부터 적용한다(열린 세션 포함). */
+    fun applyPolicy(thresholdMs: Long, cooldownMs: Long, maxDailyInterventions: Int, demoRunId: Long? = null) {
+        thresholdPolicy.thresholdMs = thresholdMs
+        gate.minIntervalMs = cooldownMs
+        dailyLimit.maxPerDay = maxDailyInterventions
+        demoLimit.maxPerDay = maxDailyInterventions
+        if (demoRunId != this.demoRunId) demoLimit.reset()
+        this.demoRunId = demoRunId
+    }
+
+    /** 오늘 이미 보여 준 개입 수를 알려 준다(서비스 재시작 뒤 저장 기록에서 복구). */
+    fun seedDailyInterventions(count: Int, demoCount: Int = 0) {
+        dailyLimit.seed(currentDay(), count)
+        demoLimit.seed(currentDay(), demoCount)
+    }
+
+    /** 켜진 동안 열린 세션의 시간을 시청시간이 아니라 가린 시간으로 센다. */
+    fun setWatchHold(hold: Boolean) = machine.setWatchHold(hold)
+
+    /** 더 보기를 고른 세션을 [atWatchMs] 시청 시점에 한 번 더 판정한다. 쿨다운·하루 상한은 그대로 적용된다. */
+    fun rearmIntervention(sessionNumber: Int, atWatchMs: Long) = thresholdPolicy.rearm(sessionNumber, atWatchMs)
 
     /** 현재 감지를 켠 패키지. 어댑터가 있어도 여기에 없으면 "다른 창"으로 본다. */
     var enabledPackages: Set<String> = adaptersByPackage.keys
@@ -110,7 +146,10 @@ class DetectionEngine(
             else Observation(atMs, WindowStatus.TARGET, packageName, AdapterVerdict.unknown(ReasonCode.ADAPTER_ERROR))
         )
 
-    fun onNotificationPosted(atMs: Long) = gate.markNotified(atMs)
+    fun onNotificationPosted(atMs: Long) {
+        gate.markNotified(atMs)
+        activeLimit.record(currentDay())
+    }
 
     fun forceEnd(atMs: Long): EngineOutput {
         val previous = machine.state
@@ -157,14 +196,18 @@ class DetectionEngine(
         val session = machine.sessionNumber
         val watchMs = machine.sessionWatchMs
         val due = thresholdPolicy.shouldDecide(session, watchMs)
-        val canNotify = due && gate.canNotify(obs.atMs)
+        val overLimit = due && !activeLimit.canIntervene(currentDay())
+        val canNotify = due && !overLimit && gate.canNotify(obs.atMs)
         return EngineOutput(
             observation = obs,
             step = step,
             notifySession = if (canNotify) session else null,
             notifyWatchMs = if (canNotify) watchMs else null,
-            suppressedByCooldown = due && !canNotify,
-            cancelNotification = step.endedSession != null
+            suppressedByCooldown = due && !overLimit && !canNotify,
+            suppressedByDailyLimit = overLimit,
+            cancelNotification = step.endedSession != null,
+            exitSignalStarted = step.current == DetectionState.EXIT_PENDING &&
+                step.previous != DetectionState.EXIT_PENDING
         )
     }
 }

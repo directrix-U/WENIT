@@ -5,10 +5,13 @@ package com.example.shortsdetector.data.usage
  *
  * 버전 2: interventions 에 level/user_reason/outcome 추가, policy_changes 테이블 추가.
  * 새 컬럼은 전부 nullable 이다. 버전 1 기록은 단계·결과를 모르므로 값을 꾸며 넣지 않고 null 로 둔다.
+ *
+ * 버전 3: interventions·policy_changes 에 is_demo 추가. 버전 2 의 시연 정책 변경은 input_summary 로 알 수 있어 옮긴다.
+ * 버전 2 의 시연 개입 기록은 구분할 표시가 없어 0 으로 남는다.
  */
 object UsageSchema {
 
-    const val VERSION = 2
+    const val VERSION = 3
 
     val CREATE_V1: List<String> = listOf(
         """
@@ -64,5 +67,11 @@ object UsageSchema {
         )
         """.trimIndent(),
         "CREATE INDEX idx_policy_changes_at ON policy_changes(occurred_at_ms)"
+    )
+
+    val MIGRATE_2_TO_3: List<String> = listOf(
+        "ALTER TABLE interventions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE policy_changes ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
+        "UPDATE policy_changes SET is_demo = 1 WHERE input_summary = 'demo_mode'"
     )
 }

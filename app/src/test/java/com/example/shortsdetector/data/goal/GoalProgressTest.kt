@@ -19,7 +19,7 @@ class GoalProgressTest {
     @Test
     fun `daily total is in progress up to the limit and exceeded past it`() {
         val at = eval(GoalType.DAILY_TOTAL, 30, none.copy(watchMs = 30 * minute))
-        assertEquals(GoalStatus.IN_PROGRESS, at.status)
+        assertEquals(GoalStatus.ON_TRACK, at.status)
         assertEquals(30, at.currentValue)
 
         val over = eval(GoalType.DAILY_TOTAL, 30, none.copy(watchMs = 30 * minute + 1))
@@ -30,7 +30,7 @@ class GoalProgressTest {
     @Test
     fun `limit goals are achieved only when the day is over`() {
         val m = none.copy(watchMs = 10 * minute, longestSessionMs = 5 * minute, sessionCount = 2)
-        assertEquals(GoalStatus.IN_PROGRESS, eval(GoalType.DAILY_TOTAL, 30, m).status)
+        assertEquals(GoalStatus.ON_TRACK, eval(GoalType.DAILY_TOTAL, 30, m).status)
         assertEquals(GoalStatus.ACHIEVED, eval(GoalType.DAILY_TOTAL, 30, m, finished = true).status)
         assertEquals(GoalStatus.ACHIEVED, eval(GoalType.PER_SESSION, 5, m, finished = true).status)
         assertEquals(GoalStatus.ACHIEVED, eval(GoalType.DAILY_OPENS, 2, m, finished = true).status)
@@ -46,19 +46,19 @@ class GoalProgressTest {
     @Test
     fun `per session uses the longest session, not the daily sum`() {
         val m = none.copy(watchMs = 60 * minute, longestSessionMs = 8 * minute)
-        assertEquals(GoalStatus.IN_PROGRESS, eval(GoalType.PER_SESSION, 10, m).status)
+        assertEquals(GoalStatus.ON_TRACK, eval(GoalType.PER_SESSION, 10, m).status)
         assertEquals(GoalStatus.EXCEEDED, eval(GoalType.PER_SESSION, 7, m).status)
     }
 
     @Test
     fun `daily opens counts sessions`() {
-        assertEquals(GoalStatus.IN_PROGRESS, eval(GoalType.DAILY_OPENS, 3, none.copy(sessionCount = 3)).status)
+        assertEquals(GoalStatus.ON_TRACK, eval(GoalType.DAILY_OPENS, 3, none.copy(sessionCount = 3)).status)
         assertEquals(GoalStatus.EXCEEDED, eval(GoalType.DAILY_OPENS, 3, none.copy(sessionCount = 4)).status)
     }
 
     @Test
     fun `self stops are achieved at once and missed only after the day ends`() {
-        assertEquals(GoalStatus.IN_PROGRESS, eval(GoalType.SELF_STOPS, 2, none.copy(selfStopCount = 1)).status)
+        assertEquals(GoalStatus.ON_TRACK, eval(GoalType.SELF_STOPS, 2, none.copy(selfStopCount = 1)).status)
         assertEquals(GoalStatus.ACHIEVED, eval(GoalType.SELF_STOPS, 2, none.copy(selfStopCount = 2)).status)
         assertEquals(GoalStatus.MISSED, eval(GoalType.SELF_STOPS, 2, none.copy(selfStopCount = 1), finished = true).status)
     }

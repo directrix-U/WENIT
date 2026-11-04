@@ -28,9 +28,30 @@
 
     <!-- 개입 문구: 비난·수치심·진단 표현을 쓰지 않는다(명세 개입 원칙) -->
     <string name="popup_title">쇼츠를 %1$s째 보고 있어요</string>
-    <string name="popup_body">지금 계속 볼지, 잠깐 멈출지 선택해 볼래요?\n누르면 앱으로 이동해요.</string>
-    <string name="popup_open">앱 열기</string>
-    <string name="popup_dismiss">닫기</string>
+    <string name="popup_lv1_title">%1$s째 보고 있어요</string>
+    <string name="popup_lv1_title_goal">%1$s째 보고 있어요 · 목표까지 %2$d분</string>
+    <string name="popup_lv1_title_goal_reached">%1$s째 보고 있어요 · 목표 시간이에요</string>
+    <string name="popup_lv1_continue">계속 볼래</string>
+    <string name="popup_lv1_stop">여기서 멈출게</string>
+    <string name="popup_lv2_title">지금 보는 거, 보고 싶어서야? 손이 가서야?</string>
+    <string name="popup_lv2_continue">조금만 더</string>
+    <string name="popup_lv2_stop">그만 볼게</string>
+    <string name="reason_fun">재밌어서</string>
+    <string name="reason_bored">심심해서</string>
+    <string name="reason_tired">피곤해서</string>
+    <string name="reason_procrastinating">할 일 미루는 중</string>
+    <string name="popup_lv3_title">잠깐 숨을 골라 봐요</string>
+    <string name="popup_lv3_body">%1$s째 보고 있어요. 천천히 숨 쉬면서 다음에 뭘 할지 골라 봐요.</string>
+    <string name="popup_lv3_countdown">%1$d</string>
+    <string name="popup_lv3_stop">오늘은 여기까지</string>
+    <string name="popup_lv3_continue">5분만 더 보기</string>
+    <string name="popup_character_description">캐릭터 이미지</string>
+
+    <!-- 정책 변경 기록에 남고 앱에서 보여 줄 이유 문구 -->
+    <string name="level_up_to_2">최근 알림을 %1$d번 넘겨서 다음엔 이유를 물어볼게요</string>
+    <string name="level_up_to_3">계속 보기를 골라서 다음엔 잠깐 숨을 고를게요</string>
+    <string name="level_down">%1$d번 연속 스스로 멈춰서 다음엔 더 가볍게 알릴게요</string>
+    <string name="policy_reason_user_threshold">사용자가 알림 시점을 바꿨어요</string>
     <string name="duration_seconds">%1$d초</string>
     <string name="duration_minutes">%1$d분</string>
 
@@ -38,6 +59,9 @@
     <string name="threshold_label">쇼츠를 이만큼 본 뒤에 알려요 (한 번 볼 때 기준, 댓글창 보는 시간 포함, 대화상자로 가린 시간 제외)</string>
     <string name="threshold_test_suffix">%1$s (테스트용)</string>
     <string name="switch_popup">화면 중앙 팝업으로 알리기 (끄면 상단 알림만)</string>
+    <string name="switch_demo_mode">시연 모드 (30초 기준, 빠른 단계 변화. 끄면 원래 정책으로 돌아가요)</string>
+    <string name="status_policy">현재 개입 단계 Lv.%1$d · 기준 %2$s</string>
+    <string name="status_policy_demo">시연 모드 · 현재 개입 단계 Lv.%1$d · 기준 %2$s</string>
     <string name="app_label_youtube">YouTube Shorts</string>
     <string name="app_label_instagram">Instagram Reels</string>
 

@@ -36,11 +36,12 @@ class SessionRecorder(
     private val tracked = HashMap<Int, Tracked>()
     private var lastCheckpointAt: Long? = null
 
-    /** 서비스 연결 시 호출. 이전 실행에서 OPEN 으로 남은 기록을 닫고 보관 기간이 지난 기록을 지운다. */
+    /** 서비스 연결 시 호출. 이전 실행에서 남은 OPEN 세션과 답 없는 개입을 닫고 보관 기간이 지난 기록을 지운다. */
     fun onServiceStarted(retentionMs: Long) {
         tracked.clear()
         lastCheckpointAt = null
         store.abortOpenSessions()
+        store.ignoreUnansweredInterventions()
         store.deleteBefore(clock.epochNowMs() - retentionMs)
     }
 
@@ -67,6 +68,7 @@ class SessionRecorder(
         watchMs: Long,
         thresholdMs: Long,
         level: Int? = null,
+        isDemo: Boolean = false,
         id: String = newId()
     ): String {
         store.insertIntervention(
@@ -77,7 +79,8 @@ class SessionRecorder(
                 method = method,
                 watchMs = watchMs,
                 thresholdMs = thresholdMs,
-                level = level
+                level = level,
+                isDemo = isDemo
             )
         )
         return id

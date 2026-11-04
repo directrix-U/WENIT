@@ -6,7 +6,10 @@ package com.example.shortsdetector.intervention
  * 상태가 어떤 이유로 흔들려도 알림이 연달아 뜨는 것만은 막는 최후 방어선.
  * 실제로 알림을 띄웠을 때만 [markNotified] 를 부른다(권한이 없어 실패하면 쿨다운을 걸지 않는다).
  */
-class NotificationGate(private val minIntervalMs: Long) {
+class NotificationGate(minIntervalMs: Long) {
+
+    /** 정책이 바뀌면 다음 판정부터 적용한다. */
+    var minIntervalMs: Long = minIntervalMs
 
     private var lastNotifiedAt: Long? = null
 

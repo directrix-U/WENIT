@@ -19,6 +19,8 @@ object UserProfilePreferences {
     private const val KEY_APPS = "shortform_apps"
     private const val KEY_TIME_SLOTS = "watch_time_slots"
     private const val KEY_DAYS = "watch_days"
+    private const val KEY_USUAL_WATCH = "usual_daily_watch"
+    private const val KEY_AI_CONSENT = "ai_recommendation_consent"
 
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -36,10 +38,12 @@ object UserProfilePreferences {
         if (!p.getBoolean(KEY_COMPLETED, false)) return null
         return UserProfile(
             ageBand = enumOrNull<AgeBand>(p.getString(KEY_AGE_BAND, null)) ?: return null,
-            gender = enumOrNull<Gender>(p.getString(KEY_GENDER, null)) ?: return null,
+            gender = enumOrNull<Gender>(p.getString(KEY_GENDER, null)) ?: Gender.NO_ANSWER,
             shortformApps = enumSet(p, KEY_APPS),
             watchTimeSlots = enumSet(p, KEY_TIME_SLOTS),
-            watchDays = enumSet<DayOfWeek>(p, KEY_DAYS)
+            watchDays = enumSet<DayOfWeek>(p, KEY_DAYS),
+            usualDailyWatch = enumOrNull<UsualDailyWatch>(p.getString(KEY_USUAL_WATCH, null)),
+            aiRecommendationConsent = p.getBoolean(KEY_AI_CONSENT, false)
         )
     }
 
@@ -50,6 +54,8 @@ object UserProfilePreferences {
         putStringSet(KEY_APPS, profile.shortformApps.mapTo(HashSet()) { it.name })
         putStringSet(KEY_TIME_SLOTS, profile.watchTimeSlots.mapTo(HashSet()) { it.name })
         putStringSet(KEY_DAYS, profile.watchDays.mapTo(HashSet()) { it.name })
+        putString(KEY_USUAL_WATCH, profile.usualDailyWatch?.name)
+        putBoolean(KEY_AI_CONSENT, profile.aiRecommendationConsent)
     }
 
     private inline fun <reified E : Enum<E>> enumOrNull(name: String?): E? =
