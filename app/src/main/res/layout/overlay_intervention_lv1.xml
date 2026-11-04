@@ -25,6 +25,16 @@
         android:textSize="@dimen/popup_title_text"
         android:textStyle="bold" />
 
+    <TextView
+        android:id="@+id/popupBody"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/popup_option_gap"
+        android:gravity="center"
+        android:textColor="@color/popup_text_secondary"
+        android:textSize="@dimen/popup_body_text"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

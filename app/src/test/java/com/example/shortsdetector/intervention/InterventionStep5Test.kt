@@ -267,7 +267,7 @@ class InterventionStep5Test {
 
     @Test
     fun `migration 3 to 4 only adds the column`() {
-        assertEquals(4, UsageSchema.VERSION)
+        assertEquals(5, UsageSchema.VERSION)
         assertEquals(listOf("ALTER TABLE sessions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0"), UsageSchema.MIGRATE_3_TO_4)
     }
 

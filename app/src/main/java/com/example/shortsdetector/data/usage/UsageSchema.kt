@@ -10,10 +10,12 @@ package com.example.shortsdetector.data.usage
  * 버전 2 의 시연 개입 기록은 구분할 표시가 없어 0 으로 남는다.
  *
  * 버전 4: sessions 에 is_demo 추가. 기존 세션은 구분할 수 없어 0 이다.
+ *
+ * 버전 5: sessions·interventions 에 is_seed 추가. 발표용 시드 기록 표시이고 기존 기록은 0 이다.
  */
 object UsageSchema {
 
-    const val VERSION = 4
+    const val VERSION = 5
 
     val CREATE_V1: List<String> = listOf(
         """
@@ -79,5 +81,10 @@ object UsageSchema {
 
     val MIGRATE_3_TO_4: List<String> = listOf(
         "ALTER TABLE sessions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0"
+    )
+
+    val MIGRATE_4_TO_5: List<String> = listOf(
+        "ALTER TABLE sessions ADD COLUMN is_seed INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE interventions ADD COLUMN is_seed INTEGER NOT NULL DEFAULT 0"
     )
 }

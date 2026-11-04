@@ -107,7 +107,7 @@ class AiGoalRecommenderTest {
         assertEquals("application/json", t.headers["content-type"])
         val body = t.body!!
         assertEquals("claude-haiku-5-5", body.getString("model"))
-        assertEquals(1024, body.getInt("max_tokens"))
+        assertEquals(4096, body.getInt("max_tokens"))
         val format = body.getJSONObject("output_config").getJSONObject("format")
         assertEquals("json_schema", format.getString("type"))
         assertSchemaClosed(format.getJSONObject("schema"))
@@ -145,13 +145,13 @@ class AiGoalRecommenderTest {
     }
 
     @Test
-    fun `long label falls back to the default and long reason is cut`() {
+    fun `one-word long label and reason are cut to the limit with an ellipsis`() {
         val r = recommend(ok(message(goals(
             goal("DAILY_TOTAL", 60, "가".repeat(30), "나".repeat(100)),
             goal("PER_SESSION", 15), goal("SELF_STOPS", 1)
         ))))
-        assertEquals("하루 60분 이하로 보기", r.goals[0].label)
-        assertEquals(40, r.goals[0].reason!!.length)
+        assertEquals("가".repeat(24) + "…", r.goals[0].label)
+        assertEquals("나".repeat(39) + "…", r.goals[0].reason)
     }
 
     @Test
@@ -298,7 +298,7 @@ class AiGoalRecommenderTest {
 
         val json = AgentInputJson.toJson(i)
         assertEquals(
-            setOf("survey", "currentGoals", "policy", "today", "week"),
+            setOf("survey", "currentGoals", "policy", "goalProgress", "recent", "recentPolicyChanges", "today", "week"),
             json.keys().asSequence().toSet()
         )
         assertEquals(300_000, json.getJSONObject("today").getLong("estimatedWatchMs"))  // 시연 세션 제외

@@ -35,6 +35,9 @@ interface UsageStore {
     /** [cutoffMs] 이전에 끝난 세션과 그 이전의 개입·정책 변경 기록을 지운다(보관 기간). 지운 세션 수. */
     fun deleteBefore(cutoffMs: Long): Int
 
+    /** 발표용 시드 기록만 지운다. */
+    fun deleteSeedRecords()
+
     /** 모든 사용 기록을 지운다(사용자 요청). 설정값은 지우지 않는다. */
     fun deleteAll()
 
@@ -102,6 +105,11 @@ class InMemoryUsageStore : UsageStore {
         interventions.values.removeAll { it.occurredAtMs < cutoffMs }
         policyChanges.values.removeAll { it.occurredAtMs < cutoffMs }
         return old.size
+    }
+
+    @Synchronized override fun deleteSeedRecords() {
+        sessions.values.removeAll { it.isSeed }
+        interventions.values.removeAll { it.isSeed }
     }
 
     @Synchronized override fun deleteAll() { sessions.clear(); interventions.clear(); policyChanges.clear() }

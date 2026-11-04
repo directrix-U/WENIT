@@ -41,7 +41,9 @@ data class SessionRecord(
     val exitCause: String?,
     val resumeCount: Int,
     /** 시연 모드 중 시작한 세션. 통계와 AI 입력에서 기본으로 뺀다. */
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    /** 발표용 시드 기록. 통계와 에이전트는 실제 기록처럼 읽고, 시드만 따로 지울 때 쓴다. */
+    val isSeed: Boolean = false
 )
 
 enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLDOWN, SUPPRESSED_BY_DAILY_LIMIT }
@@ -87,7 +89,9 @@ data class InterventionRecord(
     /** 아직 결과가 없으면 null */
     val outcome: InterventionOutcome? = null,
     /** 시연 모드의 개입. 통계와 AI 입력에서 기본으로 뺀다. */
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    /** 발표용 시드 기록 */
+    val isSeed: Boolean = false
 )
 
 /** [RULE]: 사람이나 에이전트가 아니라 결정론적 단계 규칙이 바꿨다. */

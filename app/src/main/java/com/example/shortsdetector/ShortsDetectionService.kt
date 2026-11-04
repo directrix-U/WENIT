@@ -32,6 +32,8 @@ import com.example.shortsdetector.detection.adapters.youtube.YouTubeShortsAdapte
 import com.example.shortsdetector.detection.adapters.youtube.YouTubeViewIds
 import com.example.shortsdetector.detection.features.AccessibilitySnapshotter
 import com.example.shortsdetector.detection.state.DetectionTuning
+import com.example.shortsdetector.ai.agent.AgentPreferences
+import com.example.shortsdetector.intervention.AgentCopyProvider
 import com.example.shortsdetector.intervention.GoalRemaining
 import com.example.shortsdetector.intervention.InterventionCoordinator
 import com.example.shortsdetector.intervention.InterventionCopyInput
@@ -86,7 +88,9 @@ class ShortsDetectionService : AccessibilityService() {
     private var usageStore: BackgroundUsageStore? = null
     private var recorder: SessionRecorder? = null
     private var coordinator: InterventionCoordinator? = null
-    private val copyProvider by lazy { ResourceInterventionCopyProvider(this) }
+    private val copyProvider by lazy {
+        AgentCopyProvider(ResourceInterventionCopyProvider(this)) { AgentPreferences.activeMessages(this) }
+    }
 
     /** 팝업 문구용 캐시. 메인 스레드에서만 읽고 쓴다. */
     private var goals: List<Goal> = emptyList()

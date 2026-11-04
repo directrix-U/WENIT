@@ -23,6 +23,7 @@ class UsageDatabase private constructor(context: Context) :
         UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
         UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
         UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
+        UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
     }
 
     /** SQLiteOpenHelper 가 트랜잭션으로 감싸 호출한다. 기존 기록은 지우지 않는다. */
@@ -30,6 +31,7 @@ class UsageDatabase private constructor(context: Context) :
         if (oldVersion < 2) UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
         if (oldVersion < 3) UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
         if (oldVersion < 4) UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
+        if (oldVersion < 5) UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
     }
 
     override fun upsertSession(record: SessionRecord) {
@@ -49,6 +51,7 @@ class UsageDatabase private constructor(context: Context) :
             put("exit_cause", record.exitCause)
             put("resume_count", record.resumeCount)
             put("is_demo", if (record.isDemo) 1 else 0)
+            put("is_seed", if (record.isSeed) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("sessions", null, v, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -67,6 +70,7 @@ class UsageDatabase private constructor(context: Context) :
             put("user_reason", record.userReason?.name)
             put("outcome", record.outcome?.name)
             put("is_demo", if (record.isDemo) 1 else 0)
+            put("is_seed", if (record.isSeed) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("interventions", null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
@@ -115,6 +119,18 @@ class UsageDatabase private constructor(context: Context) :
             "outcome IS NULL AND level IS NOT NULL AND method IN (?, ?)",
             arrayOf(InterventionMethod.POPUP.name, InterventionMethod.NOTIFICATION.name)
         )
+    }
+
+    override fun deleteSeedRecords() {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("sessions", "is_seed = 1", null)
+            db.delete("interventions", "is_seed = 1", null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     override fun abortOpenSessions(): Int {
@@ -193,7 +209,8 @@ class UsageDatabase private constructor(context: Context) :
         endReason = str("end_reason"),
         exitCause = str("exit_cause"),
         resumeCount = long("resume_count").toInt(),
-        isDemo = long("is_demo") != 0L
+        isDemo = long("is_demo") != 0L,
+        isSeed = long("is_seed") != 0L
     )
 
     private fun Cursor.toIntervention() = InterventionRecord(
@@ -208,7 +225,8 @@ class UsageDatabase private constructor(context: Context) :
         level = longOrNull("level")?.toInt(),
         userReason = str("user_reason")?.let { r -> InterventionUserReason.entries.firstOrNull { it.name == r } },
         outcome = str("outcome")?.let { o -> InterventionOutcome.entries.firstOrNull { it.name == o } },
-        isDemo = long("is_demo") != 0L
+        isDemo = long("is_demo") != 0L,
+        isSeed = long("is_seed") != 0L
     )
 
     /** 새 정책 값을 읽을 수 없는 행은 건너뛴다. */

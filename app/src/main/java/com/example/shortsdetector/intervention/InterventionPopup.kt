@@ -67,7 +67,10 @@ class InterventionPopup(private val service: AccessibilityService) {
             }
             val v = LayoutInflater.from(service).inflate(layout, null)
             v.findViewById<TextView>(R.id.popupTitle).text = copy.title
-            v.findViewById<TextView?>(R.id.popupBody)?.text = copy.body.orEmpty()
+            v.findViewById<TextView?>(R.id.popupBody)?.apply {
+                text = copy.body.orEmpty()
+                visibility = if (copy.body.isNullOrEmpty()) View.GONE else View.VISIBLE
+            }
             bindButtons(v, listener)
             if (level == 2) bindReasons(v, listener)
 

@@ -6,13 +6,16 @@ import com.example.shortsdetector.data.goal.GoalProgress
 import com.example.shortsdetector.data.goal.GoalProgressCalculator
 import com.example.shortsdetector.data.goal.GoalType
 import com.example.shortsdetector.data.goal.TimeWindowUsage
+import com.example.shortsdetector.data.profile.WatchTimeSlot
 import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.InterventionMethod
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionRecord
+import com.example.shortsdetector.data.usage.InterventionUserReason
 import com.example.shortsdetector.data.usage.SessionRecord
 import com.example.shortsdetector.intervention.InterventionPolicyBounds
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.TemporalAdjusters
@@ -57,6 +60,29 @@ data class WeekStats(
     val levelStopRates: List<LevelStopRate>
 )
 
+data class TimeSlotWatch(val slot: WatchTimeSlot, val watchMs: Long)
+
+data class LevelOutcomes(val level: Int, val stopped: Int, val continued: Int, val ignored: Int)
+
+data class ReasonCount(val reason: InterventionUserReason, val count: Int)
+
+/**
+ * 에이전트 입력용 최근 이용 집계.
+ * [days] 는 어제까지의 완전한 7일이다. 나머지 항목은 그 7일에 오늘까지 더해 센다(방금 쌓인 반응도 보도록).
+ */
+data class RecentUsageStats(
+    val days: List<DailyWatch>,
+    val sessionCount: Int,
+    val averageSessionMs: Long,
+    val longestSessionMs: Long,
+    /** 세션이 시작한 시각의 시간대로 나눈다 */
+    val timeSlots: List<TimeSlotWatch>,
+    /** 사용자에게 보여 준 개입 수 */
+    val deliveredInterventions: Int,
+    val levelOutcomes: List<LevelOutcomes>,
+    val lv2Reasons: List<ReasonCount>
+)
+
 data class StatsDataWindow(val fromMs: Long, val toMs: Long)
 
 /**
@@ -69,6 +95,7 @@ data class StatsDataWindow(val fromMs: Long, val toMs: Long)
 object UsageStatsCalculator {
 
     private val DELIVERED = setOf(InterventionMethod.POPUP, InterventionMethod.NOTIFICATION)
+    private const val RECENT_DAYS = 7L
 
     /** [today]·[week] 계산에 필요한 기록 범위(지난주 월요일 00:00 ~ 내일 00:00). */
     fun dataWindow(nowMs: Long, zone: ZoneId): StatsDataWindow {
@@ -174,6 +201,52 @@ object UsageStatsCalculator {
             levelStopRates = levelStopRates(thisWeek)
         )
     }
+
+    fun recent(
+        sessions: List<SessionRecord>,
+        interventions: List<InterventionRecord>,
+        zone: ZoneId,
+        nowMs: Long
+    ): RecentUsageStats {
+        val date = DailyUsageCalculator.dateOf(nowMs, zone)
+        val first = date.minusDays(RECENT_DAYS)
+        val counted = chosenSessions(sessions, false)
+        val inRange = counted.filter { !DailyUsageCalculator.dateOf(it.startedAtMs, zone).isBefore(first) }
+        val days = DailyUsageCalculator.aggregate(counted, zone, first, date.minusDays(1))
+            .map { DailyWatch(it.date, it.estimatedWatchMs) }
+        val delivered = chosen(interventions, false).filter {
+            it.method in DELIVERED && !DailyUsageCalculator.dateOf(it.occurredAtMs, zone).isBefore(first)
+        }
+        val slots = inRange.groupBy { slotOf(it.startedAtMs, zone) }
+        return RecentUsageStats(
+            days = days,
+            sessionCount = inRange.size,
+            averageSessionMs = if (inRange.isEmpty()) 0L else inRange.sumOf { it.estimatedWatchMs } / inRange.size,
+            longestSessionMs = inRange.maxOfOrNull { it.estimatedWatchMs } ?: 0L,
+            timeSlots = WatchTimeSlot.entries.map { s -> TimeSlotWatch(s, slots[s].orEmpty().sumOf { it.estimatedWatchMs }) },
+            deliveredInterventions = delivered.size,
+            levelOutcomes = (InterventionPolicyBounds.MIN_LEVEL..InterventionPolicyBounds.MAX_LEVEL).map { level ->
+                val atLevel = delivered.filter { it.level == level }
+                LevelOutcomes(
+                    level,
+                    atLevel.count { it.outcome == InterventionOutcome.STOPPED },
+                    atLevel.count { it.outcome == InterventionOutcome.CONTINUED },
+                    atLevel.count { it.outcome == InterventionOutcome.IGNORED }
+                )
+            },
+            lv2Reasons = delivered.filter { it.level == 2 }.mapNotNull { it.userReason }
+                .groupingBy { it }.eachCount().map { (reason, n) -> ReasonCount(reason, n) }
+                .sortedByDescending { it.count }
+        )
+    }
+
+    private fun slotOf(epochMs: Long, zone: ZoneId): WatchTimeSlot =
+        when (Instant.ofEpochMilli(epochMs).atZone(zone).hour) {
+            in 5..11 -> WatchTimeSlot.MORNING
+            in 12..17 -> WatchTimeSlot.DAYTIME
+            in 18..22 -> WatchTimeSlot.EVENING
+            else -> WatchTimeSlot.LATE_NIGHT
+        }
 
     /** 단계를 모르는 기록(DB 버전 1)은 뺀다. 표본이 없는 단계도 행은 돌려준다. */
     private fun levelStopRates(delivered: List<InterventionRecord>): List<LevelStopRate> =

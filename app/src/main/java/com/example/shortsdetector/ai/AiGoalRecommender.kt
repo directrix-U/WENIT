@@ -49,7 +49,7 @@ class AiGoalRecommender(
         return when (val result = client.requestJson(SYSTEM_PROMPT, userText(input), SCHEMA)) {
             is AiResult.Failure -> finish(preset, result.kind, result.httpStatus)
             is AiResult.Success -> {
-                val goals = parseGoals(result.json)
+                val goals = parseGoals(result.json, input.profile?.usualDailyWatch)
                 if (goals.isEmpty()) {
                     finish(preset, AiFailureKind.BAD_FORMAT)
                 } else {
@@ -69,11 +69,20 @@ class AiGoalRecommender(
         const val MAX_REASON_LENGTH = 40
 
         /** 형식이 맞지 않는 항목은 건너뛴다. 값은 기존 검증으로 자르고, 같은 유형은 앞의 것만 남긴다. */
-        internal fun parseGoals(json: JSONObject): List<Goal> {
+        internal fun parseGoals(json: JSONObject, usual: UsualDailyWatch? = null): List<Goal> {
             val items = json.optJSONArray("goals") ?: return emptyList()
             val goals = (0 until items.length()).mapNotNull { i -> parseGoal(items.optJSONObject(i)) }
-            return GoalRules.normalize(goals).map(::fitLengths)
+            return GoalRules.normalize(goals).map { fitLengths(belowUsual(it, usual)) }
         }
+
+        /** 하루 총량 목표가 평소 시청 시간 이상이면 줄이는 목표가 아니므로 평소값의 80%(5분 단위)로 보정한다. */
+        internal fun belowUsual(goal: Goal, usual: UsualDailyWatch?): Goal {
+            if (goal.type != GoalType.DAILY_TOTAL || usual == null || goal.value < usual.estimateMinutes) return goal
+            val adjusted = GoalRules.clampValue(GoalType.DAILY_TOTAL, roundToFive(usual.estimateMinutes * 80 / 100.0))
+            return goal.copy(value = adjusted, label = GoalRules.defaultLabel(GoalType.DAILY_TOTAL, adjusted))
+        }
+
+        private fun roundToFive(minutes: Double): Int = (Math.round(minutes / 5.0) * 5).toInt()
 
         private fun parseGoal(item: JSONObject?): Goal? {
             if (item == null) return null
@@ -85,10 +94,10 @@ class AiGoalRecommender(
             }
         }
 
-        /** 화면에 들어가도록 줄인다. 라벨은 자르면 뜻이 바뀌므로 기본 문구로 바꾼다. */
+        /** 화면에 들어가도록 띄어쓰기 위치에서 줄인다. */
         private fun fitLengths(goal: Goal) = goal.copy(
-            label = if (goal.label.length > MAX_LABEL_LENGTH) GoalRules.defaultLabel(goal.type, goal.value) else goal.label,
-            reason = goal.reason?.take(MAX_REASON_LENGTH)
+            label = TextFit.fit(goal.label, MAX_LABEL_LENGTH),
+            reason = goal.reason?.let { TextFit.fit(it, MAX_REASON_LENGTH) }
         )
 
         private fun fillFromPreset(goals: List<Goal>, preset: List<Goal>): List<Goal> {
@@ -144,9 +153,14 @@ class AiGoalRecommender(
               - TIME_WINDOW: 이 시각 이후 시청 안 함. 값은 자정을 넘겨 이어지는 분입니다. 23:00 은 1380, 새벽 1:00 은 1500 (${range(GoalType.TIME_WINDOW)})
               - DAILY_OPENS: 하루 시청 세션 수 이하 (${range(GoalType.DAILY_OPENS)})
               - SELF_STOPS: 하루 스스로 멈춘 횟수 이상 (${range(GoalType.SELF_STOPS)})
-            - 지나치게 엄격한 목표를 내지 않습니다. 평소 시청 시간에서 조금 줄이는 정도로 시작합니다.
+            - 지나치게 엄격한 목표를 내지 않습니다. 첫 목표는 부담 없게 잡습니다.
+            - DAILY_TOTAL 은 설문의 평소 시청 시간(usualDailyWatchMinutes)보다 15~40% 낮게 잡습니다.
             - label 은 한국어 ${MAX_LABEL_LENGTH}자 이내로, 화면에 보여 줄 목표 문구입니다.
-            - reason 은 한국어 ${MAX_REASON_LENGTH}자 이내로, 설문 응답을 근거로 왜 이 목표인지 씁니다.
+            - label 의 숫자는 value 와 정확히 같아야 합니다. 110분을 "2시간"으로 어림하지 않고 "110분"이라고 씁니다.
+            - reason 은 설문 응답을 근거로 왜 이 목표인지 쓴 25자 안팎의 한 문장입니다. ${MAX_REASON_LENGTH}자를 넘기지 않습니다.
+            - reason 은 "~해요" 체로 통일합니다. 높임말(~시다, ~셔서, ~신다)은 쓰지 않습니다.
+              틀림: "자주 보신다고 해서요" → 맞음: "자주 본다고 해서요"
+              예: "밤 늦게 자주 본다고 해서요", "평소보다 조금만 줄여 봐요", "길게 이어 보는 걸 끊어 줘요"
             - 나이대와 성별로 사람을 단정하지 않습니다.
         """.trimIndent()
     }
@@ -154,6 +168,35 @@ class AiGoalRecommender(
 
 /** 설문 화면이 생기기 전 디버그 빌드에서 쓰는 고정 응답. */
 object TestSurvey {
+    /** 추천 품질 점검용 설문 조합 */
+    val cases: List<Pair<String, UserProfile>> = listOf(
+        "late_night" to UserProfile(
+            AgeBand.TWENTIES, shortformApps = setOf(ShortformApp.YOUTUBE_SHORTS),
+            watchTimeSlots = setOf(WatchTimeSlot.LATE_NIGHT),
+            watchDays = DayOfWeek.entries.toSet(), usualDailyWatch = UsualDailyWatch.HOUR_1_TO_2
+        ),
+        "short_often" to UserProfile(
+            AgeBand.THIRTIES, shortformApps = setOf(ShortformApp.INSTAGRAM_REELS),
+            watchTimeSlots = setOf(WatchTimeSlot.MORNING, WatchTimeSlot.DAYTIME, WatchTimeSlot.EVENING),
+            watchDays = DayOfWeek.entries.toSet(), usualDailyWatch = UsualDailyWatch.MIN_30_TO_60
+        ),
+        "over_3h" to UserProfile(
+            AgeBand.TEENS, shortformApps = setOf(ShortformApp.YOUTUBE_SHORTS, ShortformApp.INSTAGRAM_REELS),
+            watchTimeSlots = WatchTimeSlot.entries.toSet(),
+            watchDays = DayOfWeek.entries.toSet(), usualDailyWatch = UsualDailyWatch.OVER_3_HOURS
+        ),
+        "under_30m" to UserProfile(
+            AgeBand.FORTIES, shortformApps = setOf(ShortformApp.YOUTUBE_SHORTS),
+            watchTimeSlots = setOf(WatchTimeSlot.EVENING),
+            watchDays = setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY), usualDailyWatch = UsualDailyWatch.UNDER_30_MIN
+        ),
+        "weekend" to UserProfile(
+            AgeBand.TWENTIES, shortformApps = setOf(ShortformApp.YOUTUBE_SHORTS),
+            watchTimeSlots = setOf(WatchTimeSlot.DAYTIME, WatchTimeSlot.EVENING),
+            watchDays = setOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY), usualDailyWatch = UsualDailyWatch.HOUR_2_TO_3
+        )
+    )
+
     val profile = UserProfile(
         ageBand = AgeBand.TWENTIES,
         shortformApps = setOf(ShortformApp.YOUTUBE_SHORTS),

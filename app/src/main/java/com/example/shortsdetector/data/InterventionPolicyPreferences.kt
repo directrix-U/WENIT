@@ -119,6 +119,18 @@ object InterventionPolicyPreferences {
         remove(KEY_DEMO_STOP_STREAK)
     }
 
+    /** 에이전트·되돌리기가 정책을 바꿀 때. 단계가 바뀌면 연속 횟수를 처음부터 다시 센다. */
+    internal fun writeAgentPolicy(p: SharedPreferences, policy: InterventionPolicy) {
+        val levelChanged = read(p).level != policy.clamped().level
+        write(p, policy)
+        if (levelChanged) {
+            p.edit {
+                remove(KEY_SKIP_STREAK)
+                remove(KEY_STOP_STREAK)
+            }
+        }
+    }
+
     internal fun readLevelStreaks(p: SharedPreferences): LevelStreaks {
         val demo = p.getBoolean(KEY_DEMO_MODE, false)
         return LevelStreaks(

@@ -135,9 +135,11 @@ class ClaudeMessagesClient(apiKey: String, private val transport: AiTransport) {
         const val ENDPOINT = "https://api.anthropic.com/v1/messages"
         const val API_VERSION = "2023-06-01"
         const val MODEL = "claude-haiku-5-5"
-        const val MAX_TOKENS = 1024
 
-        /** Haiku 5.5 는 thinking 이 기본으로 켜지고 max_tokens 를 함께 쓴다. 1024 안에 답이 들어오도록 낮춘다. */
+        /** thinking 이 max_tokens 를 함께 쓴다. 실제 호출에서 1024 는 통계가 들어간 입력에 잘렸다(TRUNCATED). */
+        const val MAX_TOKENS = 4096
+
+        /** Haiku 5.5 는 thinking 이 기본으로 켜진다. 짧은 판단이라 낮춰 지연과 토큰을 줄인다. */
         private const val EFFORT = "low"
     }
 }

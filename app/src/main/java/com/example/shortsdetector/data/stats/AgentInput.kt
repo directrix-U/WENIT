@@ -22,11 +22,14 @@ data class AgentInput(
     val policy: InterventionPolicy,
     val today: TodayStats,
     val week: WeekStats,
-    /** 새것부터 */
+    val recent: RecentUsageStats,
+    /** 새것부터, 최대 [AgentInputBuilder.RECENT_CHANGES] 건 */
     val recentPolicyChanges: List<PolicyChangeRecord>
 )
 
 object AgentInputBuilder {
+
+    const val RECENT_CHANGES = 3
 
     /** [sessions], [interventions] 는 [UsageStatsCalculator.dataWindow] 범위의 기록. */
     fun build(
@@ -45,6 +48,7 @@ object AgentInputBuilder {
         policy = policy,
         today = UsageStatsCalculator.today(sessions, interventions, goals, zone, nowMs),
         week = UsageStatsCalculator.week(sessions, interventions, zone, nowMs),
-        recentPolicyChanges = recentPolicyChanges.filterNot { it.isDemo }
+        recent = UsageStatsCalculator.recent(sessions, interventions, zone, nowMs),
+        recentPolicyChanges = recentPolicyChanges.filterNot { it.isDemo }.take(RECENT_CHANGES)
     )
 }

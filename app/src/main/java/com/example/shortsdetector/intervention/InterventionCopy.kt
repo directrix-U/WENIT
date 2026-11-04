@@ -3,6 +3,7 @@ package com.example.shortsdetector.intervention
 import android.content.Context
 import com.example.shortsdetector.R
 import com.example.shortsdetector.ShortsNotifier
+import com.example.shortsdetector.ai.agent.AgentMessages
 import com.example.shortsdetector.data.goal.Goal
 import com.example.shortsdetector.data.goal.GoalType
 
@@ -46,6 +47,26 @@ class ResourceInterventionCopyProvider(private val context: Context) : Intervent
         to < from -> context.getString(R.string.level_down, policy.deescalateAfterStops)
         to == 2 -> context.getString(R.string.level_up_to_2, policy.escalateAfterSkips)
         else -> context.getString(R.string.level_up_to_3)
+    }
+}
+
+/**
+ * 에이전트 문구를 먼저 쓰고, 없으면 고정 문구를 쓴다. 문구만 바꾸며 판정에는 관여하지 않는다.
+ * Lv.1 은 에이전트 문구를 제목으로, 시청시간이 담긴 고정 문구를 본문으로 보여 준다. Lv.3 은 고정 문구를 유지한다.
+ */
+class AgentCopyProvider(
+    private val fixed: InterventionCopyProvider,
+    private val messages: () -> AgentMessages?
+) : InterventionCopyProvider by fixed {
+
+    override fun copyFor(input: InterventionCopyInput): InterventionCopy {
+        val base = fixed.copyFor(input)
+        val agent = messages() ?: return base
+        return when (input.level) {
+            1 -> agent.lv1Message?.let { InterventionCopy(it, base.title) } ?: base
+            2 -> agent.lv2Question?.let { InterventionCopy(it) } ?: base
+            else -> base
+        }
     }
 }
 

@@ -97,6 +97,22 @@
     <string name="ai_no_failure">없음</string>
     <string name="ai_result_summary">걸린 시간 %1$dms · 실패 종류 %2$s · HTTP %3$s</string>
     <string name="ai_goal_item">%1$s\n%2$s\n(%3$s) 눌러서 저장</string>
+    <string name="section_agent">개입 정책 에이전트 (임시 확인)</string>
+    <string name="switch_agent_enabled">에이전트 조절 켜기 (끄면 규칙 기반 단계 변화만 동작해요)</string>
+    <string name="button_agent_run">지금 분석</string>
+    <string name="button_agent_revert">최근 변경 되돌리기</string>
+    <string name="button_seed_a">시나리오 A 넣기</string>
+    <string name="button_seed_b">시나리오 B 넣기</string>
+    <string name="button_goal_eval">디버그: 설문 5종 추천 점검</string>
+    <string name="agent_policy_summary">기준 %1$d초 · 쿨다운 %2$d초 · 하루 %3$d회 · 단계 Lv.%4$d (최대 %5$d)\nLv.1 문구: %6$s\nLv.2 문구: %7$s</string>
+    <string name="agent_fixed_copy">고정 문구</string>
+    <string name="agent_last_result">마지막 분석: %1$s</string>
+    <string name="agent_no_changes">정책 변경 기록이 없어요.</string>
+    <string name="agent_revert_reason">사용자가 에이전트 변경을 되돌렸어요</string>
+    <string name="toast_agent_reverted">이전 정책으로 되돌렸어요.</string>
+    <string name="toast_agent_nothing_to_revert">되돌릴 변경이 없어요.</string>
+    <string name="toast_seed_done">세션 %1$d개, 개입 %2$d개를 넣었어요.</string>
+    <string name="ai_goal_eval_done">추천 점검 완료: %1$d행</string>
     <string name="toast_goal_saved">목표를 저장했어요.</string>
     <string name="toast_goal_full">목표는 3개까지예요. 다른 유형의 목표를 지운 뒤 저장해 주세요.</string>
 </resources>
