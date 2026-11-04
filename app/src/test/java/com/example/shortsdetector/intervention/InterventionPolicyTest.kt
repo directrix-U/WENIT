@@ -50,10 +50,11 @@ class InterventionPolicyTest {
     }
 
     @Test
-    fun `per session goal drives the threshold and removing it restores the policy value`() {
+    fun `threshold is the smaller of policy and per session goal, and removing the goal restores it`() {
         val p = InterventionPolicy(thresholdMs = 300_000)
-        val goals = listOf(GoalRules.userGoal(GoalType.DAILY_TOTAL, 60), GoalRules.userGoal(GoalType.PER_SESSION, 7))
-        assertEquals(420_000, p.effectiveThresholdMs(goals))
+        val goals = listOf(GoalRules.userGoal(GoalType.DAILY_TOTAL, 60), GoalRules.userGoal(GoalType.PER_SESSION, 3))
+        assertEquals(180_000, p.effectiveThresholdMs(goals))
+        assertEquals(300_000, p.effectiveThresholdMs(listOf(GoalRules.userGoal(GoalType.PER_SESSION, 7))))
         assertEquals(300_000, p.thresholdMs)                  // 정책 자체는 그대로
         assertEquals(300_000, p.effectiveThresholdMs(goals.take(1)))
         assertEquals(300_000, p.effectiveThresholdMs(emptyList()))
@@ -62,7 +63,7 @@ class InterventionPolicyTest {
     @Test
     fun `unvalidated per session value is still clipped`() {
         val bad = Goal(GoalType.PER_SESSION, 100_000, "x", null, GoalSource.AI)
-        assertEquals(3_600_000, InterventionPolicy().effectiveThresholdMs(listOf(bad)))
+        assertEquals(3_600_000, InterventionPolicy(thresholdMs = 3_600_000).effectiveThresholdMs(listOf(bad)))
     }
 
     @Test

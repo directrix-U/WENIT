@@ -122,6 +122,15 @@ class InterventionCoordinator(
     }
 
     companion object {
+        /** 시연 준비 초기화 기록 */
+        fun demoResetChange(
+            before: InterventionPolicy,
+            after: InterventionPolicy,
+            id: String,
+            atMs: Long,
+            reason: String
+        ) = PolicyChangeRecord(id, atMs, PolicyChangeSource.DEFAULT, before, after, reason, null, PolicyChangeStatus.APPLIED)
+
         /** 사용자가 바꾼 기준 시간의 변경 기록. 값이 그대로면 null. 잘린 값이 [PolicyChangeRecord.newPolicy] 에 들어간다. */
         fun userThresholdChange(
             before: InterventionPolicy,

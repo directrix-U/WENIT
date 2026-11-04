@@ -21,6 +21,7 @@ object UserProfilePreferences {
     private const val KEY_DAYS = "watch_days"
     private const val KEY_USUAL_WATCH = "usual_daily_watch"
     private const val KEY_AI_CONSENT = "ai_recommendation_consent"
+    private const val KEY_ONBOARDING_DONE = "onboarding_done"
 
     fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
@@ -31,7 +32,12 @@ object UserProfilePreferences {
 
     fun save(context: Context, profile: UserProfile) = write(prefs(context), profile)
 
-    /** 설문 완료 여부와 무관하게 동의 값만 읽고 쓴다(임시 스위치용). */
+    /** 첫 실행 흐름(설문 → 동의 → 권한 → 목표)을 끝냈는지. 설문 완료와 별개다. */
+    fun isOnboardingDone(context: Context): Boolean = prefs(context).getBoolean(KEY_ONBOARDING_DONE, false)
+
+    fun markOnboardingDone(context: Context) = prefs(context).edit { putBoolean(KEY_ONBOARDING_DONE, true) }
+
+    /** 설문 완료 여부와 무관하게 동의 값만 읽고 쓴다. */
     fun isAiConsentGiven(context: Context): Boolean = prefs(context).getBoolean(KEY_AI_CONSENT, false)
 
     fun setAiConsent(context: Context, given: Boolean) = prefs(context).edit { putBoolean(KEY_AI_CONSENT, given) }

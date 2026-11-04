@@ -496,7 +496,7 @@ class ShortsDetectionService : AccessibilityService() {
         val copy = copyProvider.copyFor(
             InterventionCopyInput(level, watchMs, GoalRemaining.minutes(goals, todayWatchBeforeSessionMs, watchMs))
         )
-        val popupShown = DetectionPreferences.isPopupEnabled(this) && popup.show(level, copy, popupListener)
+        val popupShown = DetectionPreferences.isPopupEnabled(this) && popup.show(level, copy, watchMs, popupListener)
         val notified = !popupShown &&
             ShortsNotifier.notifyWatchThreshold(this, session, pkg, watchMs, interventionId)
         val shown = popupShown || notified

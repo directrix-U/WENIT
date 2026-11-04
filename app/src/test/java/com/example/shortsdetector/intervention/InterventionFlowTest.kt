@@ -428,9 +428,9 @@ class InterventionFlowTest {
     @Test
     fun `per session goal drives the resolved threshold outside demo mode only`() {
         val goals = listOf(com.example.shortsdetector.data.goal.GoalRules.userGoal(
-            com.example.shortsdetector.data.goal.GoalType.PER_SESSION, 7
+            com.example.shortsdetector.data.goal.GoalType.PER_SESSION, 2
         ))
-        assertEquals(420_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
+        assertEquals(120_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
         InterventionPolicyPreferences.writeDemoMode(prefs, true)
         assertEquals(10_000, InterventionPolicyPreferences.resolve(prefs, goals).thresholdMs)
     }

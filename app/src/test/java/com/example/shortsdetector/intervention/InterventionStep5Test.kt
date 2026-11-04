@@ -274,14 +274,19 @@ class InterventionStep5Test {
     // --- 시연 준비 초기화 ---
 
     @Test
-    fun `reset returns level and streaks to the start and keeps other settings`() {
+    fun `reset returns the whole policy and streaks to the demo start values`() {
         val saved = InterventionPolicy(thresholdMs = 10_000, level = 3, cooldownMs = 60_000, maxDailyInterventions = 7, maxLevel = 3)
         InterventionPolicyPreferences.write(prefs, saved)
         InterventionPolicyPreferences.writeLevelState(prefs, 3, LevelStreaks(skips = 1, stops = 1))
 
-        InterventionPolicyPreferences.resetForDemo(prefs, 55)
+        assertEquals(saved, InterventionPolicyPreferences.resetForDemo(prefs, 55))
 
-        assertEquals(saved.copy(level = 1), InterventionPolicyPreferences.read(prefs))
+        val start = InterventionPolicyPreferences.read(prefs)
+        assertEquals(InterventionPolicy(), start)
+        assertEquals(180_000, start.thresholdMs)
+        assertEquals(1, start.level)
+        assertEquals(10, start.maxDailyInterventions)
+        assertEquals(3, start.maxLevel)
         assertEquals(LevelStreaks(), streaks())
         assertEquals(55L, prefs.getLong(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT, 0))
     }

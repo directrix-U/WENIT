@@ -248,7 +248,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `is_demo`: boolean
 
 ### `InterventionPolicy`
-- `threshold_ms`: 개입 기준 시간의 유일한 저장 위치. 판정에는 PER_SESSION 목표를 반영한 값을 쓴다
+- `threshold_ms`: 개입 기준 시간의 유일한 저장 위치. 실제 기준은 이 값과 PER_SESSION 목표 중 작은 값이다
 - `level`: 현재 단계
 - `max_level`: 2 또는 3, 기본 3. 2 면 Lv.3 을 쓰지 않는다
 - `escalate_after_skips`, `deescalate_after_stops`, `cooldown_ms`, `max_daily_interventions`

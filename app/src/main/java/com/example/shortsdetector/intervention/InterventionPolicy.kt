@@ -38,13 +38,13 @@ data class InterventionPolicy(
     }
 
     /**
-     * 실제로 쓸 개입 기준 시간. PER_SESSION 목표가 있으면 그 값이 정책 값보다 우선한다.
+     * 실제로 쓸 개입 기준 시간: 정책 값과 PER_SESSION 목표 중 작은 값.
      * 정책을 덮어쓰지 않고 그때그때 계산하므로, 목표를 지우면 원래 기준으로 돌아간다.
      */
     fun effectiveThresholdMs(goals: List<Goal>): Long {
         val goal = goals.firstOrNull { it.type == GoalType.PER_SESSION }
-        val ms = goal?.let { GoalRules.clampValue(GoalType.PER_SESSION, it.value) * MS_PER_MINUTE } ?: thresholdMs
-        return ms.coerceIn(InterventionPolicyBounds.THRESHOLD_MS)
+        val goalMs = goal?.let { GoalRules.clampValue(GoalType.PER_SESSION, it.value) * MS_PER_MINUTE }
+        return minOf(thresholdMs, goalMs ?: thresholdMs).coerceIn(InterventionPolicyBounds.THRESHOLD_MS)
     }
 
     private companion object {

@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     id("com.android.application")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // 키는 저장소에 넣지 않는 local.properties 에서만 읽는다. 값을 출력하지 않는다.
@@ -42,7 +43,7 @@ android {
     }
 
     buildFeatures {
-        viewBinding = true
+        compose = true
         buildConfig = true
     }
 }
@@ -50,7 +51,14 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.activity:activity-ktx:1.8.2")
+    implementation("androidx.activity:activity-ktx:1.12.2")
+
+    // 정식 화면. 내장 Kotlin 2.2 가 읽을 수 있는 버전으로 고정한다. 차트는 Canvas 로 그린다.
+    implementation(platform("androidx.compose:compose-bom:2025.12.01"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.12.2")
+    implementation("androidx.navigation:navigation-compose:2.9.6")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
 
     // 감지 엔진(순수 Kotlin) JVM 단위 테스트용.
     testImplementation("junit:junit:4.13.2")

@@ -14,6 +14,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.example.shortsdetector.detection.adapters.instagram.InstagramReelsAdapter
 import com.example.shortsdetector.detection.adapters.youtube.YouTubeViewIds
+import com.example.shortsdetector.ui.WenitActivity
 
 /**
  * 개입을 시스템 알림으로 띄우는 책임만 갖는다.
@@ -64,10 +65,10 @@ object ShortsNotifier {
         val contentIntent = PendingIntent.getActivity(
             context,
             0,
-            Intent(context, MainActivity::class.java)
+            Intent(context, WenitActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(MainActivity.EXTRA_FROM_INTERVENTION, true)
-                .putExtra(MainActivity.EXTRA_INTERVENTION_ID, interventionId),
+                .putExtra(WenitActivity.EXTRA_FROM_INTERVENTION, true)
+                .putExtra(WenitActivity.EXTRA_INTERVENTION_ID, interventionId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 

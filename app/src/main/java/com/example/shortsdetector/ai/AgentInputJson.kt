@@ -1,6 +1,7 @@
 package com.example.shortsdetector.ai
 
 import com.example.shortsdetector.data.goal.Goal
+import com.example.shortsdetector.data.goal.GoalType
 import com.example.shortsdetector.data.stats.AgentInput
 import com.example.shortsdetector.data.stats.RecentUsageStats
 import org.json.JSONArray
@@ -37,6 +38,10 @@ object AgentInputJson {
                 .put("cooldownMs", input.policy.cooldownMs)
                 .put("maxDailyInterventions", input.policy.maxDailyInterventions)
                 .put("maxLevel", input.policy.maxLevel)
+                .put(
+                    "perSessionGoalMinutes",
+                    input.goals.firstOrNull { it.type == GoalType.PER_SESSION }?.value ?: JSONObject.NULL
+                )
         )
         root.put(
             "goalProgress",

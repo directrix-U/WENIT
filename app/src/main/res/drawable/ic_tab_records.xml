@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 임시 아이콘. 디자인이 정해지면 교체한다 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M5,20 L5,11 L9,11 L9,20 Z M10,20 L10,5 L14,5 L14,20 Z M15,20 L15,14 L19,14 L19,20 Z" />
+</vector>

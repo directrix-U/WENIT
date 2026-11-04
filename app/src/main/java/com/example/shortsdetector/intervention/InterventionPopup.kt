@@ -11,11 +11,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
-import com.example.shortsdetector.MainActivity
 import com.example.shortsdetector.R
 import com.example.shortsdetector.ShortsDetectionService
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionUserReason
+import com.example.shortsdetector.ui.WenitActivity
 
 /**
  * 단계별 개입 팝업. 접근성 서비스의 TYPE_ACCESSIBILITY_OVERLAY 창으로 띄운다
@@ -55,8 +55,11 @@ class InterventionPopup(private val service: AccessibilityService) {
 
     val isShowing: Boolean get() = view != null
 
-    /** @return 실제로 창을 붙였으면 true */
-    fun show(level: Int, copy: InterventionCopy, listener: Listener): Boolean {
+    /**
+     * @param watchMs 이 개입 시점의 시청시간. 멈춘 뒤 홈 화면에 보여 준다.
+     * @return 실제로 창을 붙였으면 true
+     */
+    fun show(level: Int, copy: InterventionCopy, watchMs: Long, listener: Listener): Boolean {
         dismiss()
         val wm = service.getSystemService(WindowManager::class.java) ?: return false
         return try {
@@ -71,7 +74,7 @@ class InterventionPopup(private val service: AccessibilityService) {
                 text = copy.body.orEmpty()
                 visibility = if (copy.body.isNullOrEmpty()) View.GONE else View.VISIBLE
             }
-            bindButtons(v, listener)
+            bindButtons(v, watchMs, listener)
             if (level == 2) bindReasons(v, listener)
 
             val fullScreen = level >= InterventionPolicyBounds.MAX_LEVEL
@@ -87,7 +90,7 @@ class InterventionPopup(private val service: AccessibilityService) {
         }
     }
 
-    private fun bindButtons(v: View, listener: Listener) {
+    private fun bindButtons(v: View, watchMs: Long, listener: Listener) {
         var answered = false
         fun answer(outcome: InterventionOutcome) {
             if (answered) return
@@ -97,7 +100,7 @@ class InterventionPopup(private val service: AccessibilityService) {
             } catch (e: RuntimeException) {
                 Log.w(ShortsDetectionService.TAG, "개입 반응 기록 실패: ${e.javaClass.simpleName}")
             }
-            if (outcome == InterventionOutcome.STOPPED) openApp() else dismiss()
+            if (outcome == InterventionOutcome.STOPPED) openApp(watchMs) else dismiss()
         }
         v.findViewById<View>(R.id.popupContinue).setOnClickListener { answer(InterventionOutcome.CONTINUED) }
         v.findViewById<View>(R.id.popupStop).setOnClickListener { answer(InterventionOutcome.STOPPED) }
@@ -179,14 +182,15 @@ class InterventionPopup(private val service: AccessibilityService) {
         }
     }
 
-    private fun openApp() {
+    private fun openApp(watchMs: Long) {
         dismiss()
         try {
             // 접근성 서비스가 바인딩된 앱은 백그라운드 Activity 시작 제한의 예외다. 그래도 사용자 탭일 때만 연다.
             service.startActivity(
-                Intent(service, MainActivity::class.java)
+                Intent(service, WenitActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    .putExtra(MainActivity.EXTRA_FROM_INTERVENTION, true)
+                    .putExtra(WenitActivity.EXTRA_FROM_INTERVENTION, true)
+                    .putExtra(WenitActivity.EXTRA_STOPPED_WATCH_MS, watchMs)
             )
         } catch (e: RuntimeException) {
             Log.w(ShortsDetectionService.TAG, "앱 열기 실패: ${e.javaClass.simpleName}")
