@@ -39,7 +39,9 @@ data class SessionRecord(
     val endReason: String?,
     /** ExitCause 이름. EXIT_CONFIRMED 가 아니면 null. */
     val exitCause: String?,
-    val resumeCount: Int
+    val resumeCount: Int,
+    /** 시연 모드 중 시작한 세션. 통계와 AI 입력에서 기본으로 뺀다. */
+    val isDemo: Boolean = false
 )
 
 enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLDOWN, SUPPRESSED_BY_DAILY_LIMIT }
@@ -47,7 +49,13 @@ enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLD
 enum class InterventionAction { OPEN_APP, DISMISS }
 
 /** 개입 뒤 사용자 행동. [InterventionAction](버튼 반응)과 별개로, 단계 규칙과 멈춤 비율 통계의 입력이다. */
-enum class InterventionOutcome { STOPPED, CONTINUED, IGNORED }
+enum class InterventionOutcome {
+    STOPPED,
+    CONTINUED,
+    IGNORED,
+    /** 이탈 신호로 앱이 오버레이를 닫았다. 사용자의 반응이 아니므로 단계 규칙과 멈춤 비율에 넣지 않는다. */
+    INTERRUPTED
+}
 
 /** 사용자가 고른 이유. 정해진 선택지만 저장한다(자유 입력 없음). */
 enum class InterventionUserReason {

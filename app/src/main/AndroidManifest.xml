@@ -4,6 +4,9 @@
     <!-- Android 13+ 에서 알림을 띄우려면 런타임 권한이 필요하다. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- AI 목표 추천 호출. 사용자가 AI 추천에 동의하고 버튼을 눌렀을 때만 쓴다. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

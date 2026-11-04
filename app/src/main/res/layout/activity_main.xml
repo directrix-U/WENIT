@@ -162,6 +162,49 @@
             android:layout_marginTop="8dp"
             android:text="@string/button_delete_records" />
 
+        <Button
+            android:id="@+id/buttonResetForDemo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/button_reset_demo" />
+
+        <!-- 임시 확인 화면. 정식 온보딩은 Compose 단계에서 만든다 -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="28dp"
+            android:text="@string/section_ai"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/switchAiConsent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/switch_ai_consent" />
+
+        <Button
+            android:id="@+id/buttonAiRecommend"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/button_ai_recommend" />
+
+        <TextView
+            android:id="@+id/textAiResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="13sp" />
+
+        <LinearLayout
+            android:id="@+id/groupAiGoals"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

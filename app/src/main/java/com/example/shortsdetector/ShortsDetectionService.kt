@@ -147,7 +147,10 @@ class ShortsDetectionService : AccessibilityService() {
         if (recorder != null) return
         try {
             val store = BackgroundUsageStore(UsageDatabase.get(this))
-            val r = SessionRecorder(store, SystemUsageClock)
+            val r = SessionRecorder(
+                store, SystemUsageClock,
+                isDemoMode = { InterventionPolicyPreferences.isDemoMode(this) }
+            )
             r.onServiceStarted(TimeUnit.DAYS.toMillis(DetectionConfig.USAGE_RETENTION_DAYS))
             usageStore = store
             recorder = r
@@ -180,7 +183,7 @@ class ShortsDetectionService : AccessibilityService() {
         usageStore?.read { s ->
             val zone = ZoneId.systemDefault()
             val today = DailyUsageCalculator.dateOf(from, zone)
-            val earlier = s.sessionsOverlapping(from, to).filter { it.status != SessionStatus.OPEN }
+            val earlier = s.sessionsOverlapping(from, to).filter { it.status != SessionStatus.OPEN && !it.isDemo }
             val watch = DailyUsageCalculator.aggregate(earlier, zone, today, today).single().estimatedWatchMs
             handler.post { if (engine.sessionProgress()?.sessionNumber == startedSession) todayWatchBeforeSessionMs = watch }
         }
@@ -324,6 +327,15 @@ class ShortsDetectionService : AccessibilityService() {
         coordinator?.let { c -> guarded { c.abandon() } }
     }
 
+    /** 이탈 신호로 오버레이를 닫는다. 사용자의 반응이 아니므로 INTERRUPTED 로 남기고, 세션이 이어지면 다시 개입한다. */
+    private fun interruptIntervention() {
+        popup.dismiss()
+        engine.setWatchHold(false)
+        coordinator?.let { c ->
+            guarded { c.interrupt()?.let { engine.retryIntervention(it.sessionNumber) } }
+        }
+    }
+
     /** 기록 실패가 감지·개입을 막지 않게 격리한다. */
     private inline fun guarded(block: () -> Unit) {
         try {
@@ -426,7 +438,7 @@ class ShortsDetectionService : AccessibilityService() {
         // 종료 판정(grace)을 기다리지 않고 오버레이만 먼저 닫는다. 알림은 세션이 끝날 때 지운다.
         if (output.exitSignalStarted && popup.isShowing) {
             Log.i(TAG, "[$source] 이탈 신호: 개입 오버레이 닫음")
-            closeIntervention()
+            interruptIntervention()
         }
         if (output.cancelNotification) {
             ShortsNotifier.cancel(this)

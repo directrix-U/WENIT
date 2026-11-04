@@ -11,6 +11,9 @@ object DemoMode {
     const val COOLDOWN_MS = 10_000L
     const val ESCALATE_AFTER_SKIPS = 1
 
+    /** "5분만 더 보기" 를 시연에서 볼 수 있게 줄인 재개입 시간 */
+    const val MORE_TIME_MS = 30_000L
+
     fun overlay(saved: InterventionPolicy, demoLevel: Int): InterventionPolicy = saved.copy(
         thresholdMs = THRESHOLD_MS,
         cooldownMs = COOLDOWN_MS,
@@ -22,7 +25,7 @@ object DemoMode {
 /** 계속 보기를 고른 뒤 같은 세션에서 다시 개입할 시점. */
 object ReinterventionRule {
 
-    /** Lv.3 "5분만 더 보기". 벽시계가 아니라 시청시간 기준이다. */
+    /** Lv.3 "5분만 더 보기". 벽시계가 아니라 시청시간 기준이다. 시연 모드는 [DemoMode.MORE_TIME_MS]. */
     const val FIVE_MORE_MINUTES_MS = 300_000L
 
     /**
@@ -32,7 +35,8 @@ object ReinterventionRule {
      */
     fun afterWatchMs(level: Int, outcome: InterventionOutcome, demoThresholdMs: Long?): Long? = when {
         outcome != InterventionOutcome.CONTINUED -> null
-        level >= InterventionPolicyBounds.MAX_LEVEL -> FIVE_MORE_MINUTES_MS
+        level >= InterventionPolicyBounds.MAX_LEVEL ->
+            if (demoThresholdMs != null) DemoMode.MORE_TIME_MS else FIVE_MORE_MINUTES_MS
         else -> demoThresholdMs
     }
 }

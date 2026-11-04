@@ -32,9 +32,10 @@ object SavedTimeCalculator {
      * @param sessions 첫 기록을 포함한 기록
      */
     fun firstWeekAverageMs(sessions: List<SessionRecord>, zone: ZoneId, today: LocalDate): Long? {
-        val first = sessions.minOfOrNull { it.startedAtMs }?.let { DailyUsageCalculator.dateOf(it, zone) } ?: return null
+        val real = sessions.filterNot { it.isDemo }
+        val first = real.minOfOrNull { it.startedAtMs }?.let { DailyUsageCalculator.dateOf(it, zone) } ?: return null
         if (today.isBefore(first.plusDays(FIRST_WEEK_DAYS))) return null
-        val days = DailyUsageCalculator.aggregate(sessions, zone, first, first.plusDays(FIRST_WEEK_DAYS - 1))
+        val days = DailyUsageCalculator.aggregate(real, zone, first, first.plusDays(FIRST_WEEK_DAYS - 1))
         return days.sumOf { it.estimatedWatchMs } / FIRST_WEEK_DAYS
     }
 

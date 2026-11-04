@@ -22,12 +22,14 @@ class UsageDatabase private constructor(context: Context) :
         UsageSchema.CREATE_V1.forEach(db::execSQL)
         UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
         UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
+        UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
     }
 
     /** SQLiteOpenHelper 가 트랜잭션으로 감싸 호출한다. 기존 기록은 지우지 않는다. */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) UsageSchema.MIGRATE_1_TO_2.forEach(db::execSQL)
         if (oldVersion < 3) UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
+        if (oldVersion < 4) UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
     }
 
     override fun upsertSession(record: SessionRecord) {
@@ -46,6 +48,7 @@ class UsageDatabase private constructor(context: Context) :
             put("end_reason", record.endReason)
             put("exit_cause", record.exitCause)
             put("resume_count", record.resumeCount)
+            put("is_demo", if (record.isDemo) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("sessions", null, v, SQLiteDatabase.CONFLICT_REPLACE)
     }
@@ -189,7 +192,8 @@ class UsageDatabase private constructor(context: Context) :
         maxConfidence = str("max_confidence") ?: "LOW",
         endReason = str("end_reason"),
         exitCause = str("exit_cause"),
-        resumeCount = long("resume_count").toInt()
+        resumeCount = long("resume_count").toInt(),
+        isDemo = long("is_demo") != 0L
     )
 
     private fun Cursor.toIntervention() = InterventionRecord(

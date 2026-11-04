@@ -61,6 +61,24 @@ object InterventionPolicyPreferences {
     internal fun writeRecordsCleared(p: SharedPreferences, nowMs: Long) =
         p.edit { putLong(KEY_RECORDS_CLEARED_AT, nowMs) }
 
+    /** 시연 준비 초기화: 저장 정책의 단계를 Lv.1 로, 연속 횟수와 시연 단계를 처음으로 되돌린다. 기준 시간 등 다른 값은 둔다. */
+    fun resetForDemo(context: Context) {
+        migrate(context)
+        resetForDemo(prefs(context), System.currentTimeMillis())
+    }
+
+    internal fun resetForDemo(p: SharedPreferences, nowMs: Long) {
+        write(p, read(p).copy(level = InterventionPolicyBounds.MIN_LEVEL))
+        p.edit {
+            remove(KEY_SKIP_STREAK)
+            remove(KEY_STOP_STREAK)
+            remove(KEY_DEMO_LEVEL)
+            remove(KEY_DEMO_SKIP_STREAK)
+            remove(KEY_DEMO_STOP_STREAK)
+            putLong(KEY_RECORDS_CLEARED_AT, nowMs)
+        }
+    }
+
     private fun migrate(context: Context) {
         migrateLegacyThreshold(prefs(context), DetectionPreferences.prefs(context))
     }

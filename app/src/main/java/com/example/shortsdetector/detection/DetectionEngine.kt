@@ -68,6 +68,9 @@ class DetectionEngine(
     private val demoLimit = DailyInterventionLimit(maxDailyInterventions)
     private var demoRunId: Long? = null
 
+    /** 앱이 오버레이를 닫아 답을 못 받은 세션. 이어지면 다시 개입한다. */
+    private var retrySession: Int? = null
+
     /** 시연 모드면 시연 전용 카운터를 쓴다. 시연 개입이 실제 하루 상한을 소모하지 않는다. */
     private val activeLimit get() = if (demoRunId != null) demoLimit else dailyLimit
 
@@ -90,6 +93,26 @@ class DetectionEngine(
     fun seedDailyInterventions(count: Int, demoCount: Int = 0) {
         dailyLimit.seed(currentDay(), count)
         demoLimit.seed(currentDay(), demoCount)
+    }
+
+    /**
+     * 이탈 신호로 닫힌 개입을 다시 시도한다. 같은 세션이 이어져 숏폼 화면이고 기준을 넘었으면 쿨다운 뒤에 개입한다.
+     * 쿨다운 동안은 기회를 쓰지 않고 기다린다. 다른 세션이 시작되면 버린다.
+     */
+    fun retryIntervention(sessionNumber: Int) {
+        retrySession = sessionNumber
+    }
+
+    private fun retryDue(session: Int?, watchMs: Long, state: DetectionState, atMs: Long): Boolean {
+        val target = retrySession ?: return false
+        if (session != null && session != target) {
+            retrySession = null
+            return false
+        }
+        val ready = session != null && state == DetectionState.SHORTFORM_ESTIMATED &&
+            watchMs >= thresholdPolicy.thresholdMs && gate.canNotify(atMs)
+        if (ready) retrySession = null
+        return ready
     }
 
     /** 기록을 전부 지웠을 때. 다음 개입부터 0 부터 다시 센다. */
@@ -201,7 +224,7 @@ class DetectionEngine(
         val step = machine.onObservation(obs)
         val session = machine.sessionNumber
         val watchMs = machine.sessionWatchMs
-        val due = thresholdPolicy.shouldDecide(session, watchMs)
+        val due = thresholdPolicy.shouldDecide(session, watchMs) || retryDue(session, watchMs, step.current, obs.atMs)
         val overLimit = due && !activeLimit.canIntervene(currentDay())
         val canNotify = due && !overLimit && gate.canNotify(obs.atMs)
         return EngineOutput(

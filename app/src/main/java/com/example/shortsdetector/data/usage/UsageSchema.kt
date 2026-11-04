@@ -8,10 +8,12 @@ package com.example.shortsdetector.data.usage
  *
  * 버전 3: interventions·policy_changes 에 is_demo 추가. 버전 2 의 시연 정책 변경은 input_summary 로 알 수 있어 옮긴다.
  * 버전 2 의 시연 개입 기록은 구분할 표시가 없어 0 으로 남는다.
+ *
+ * 버전 4: sessions 에 is_demo 추가. 기존 세션은 구분할 수 없어 0 이다.
  */
 object UsageSchema {
 
-    const val VERSION = 3
+    const val VERSION = 4
 
     val CREATE_V1: List<String> = listOf(
         """
@@ -73,5 +75,9 @@ object UsageSchema {
         "ALTER TABLE interventions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE policy_changes ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0",
         "UPDATE policy_changes SET is_demo = 1 WHERE input_summary = 'demo_mode'"
+    )
+
+    val MIGRATE_3_TO_4: List<String> = listOf(
+        "ALTER TABLE sessions ADD COLUMN is_demo INTEGER NOT NULL DEFAULT 0"
     )
 }

@@ -15,6 +15,7 @@ data class LevelStep(val policy: InterventionPolicy, val streaks: LevelStreaks, 
  *  - Lv.2: CONTINUED(계속 보기를 고름)이면 바로 Lv.3. IGNORED 는 고른 것이 아니므로 단계를 유지한다.
  *    정책의 maxLevel 이 2 면 Lv.3 으로 올라가지 않는다.
  *  - STOPPED 가 연속 deescalateAfterStops 번이면 한 단계 내린다(Lv.1 이 바닥).
+ *  - INTERRUPTED 는 사용자의 반응이 아니므로 단계도 연속 횟수도 바꾸지 않는다.
  *  - 멈추면 넘김 연속이 끊기고, 멈추지 않으면 멈춤 연속이 끊긴다. 단계가 바뀌면 둘 다 0 부터 다시 센다.
  */
 object InterventionLevelRules {
@@ -22,6 +23,7 @@ object InterventionLevelRules {
     fun next(policy: InterventionPolicy, streaks: LevelStreaks, outcome: InterventionOutcome): LevelStep {
         val p = policy.clamped()
         return when {
+            outcome == InterventionOutcome.INTERRUPTED -> LevelStep(p, streaks, levelChanged = false)
             outcome == InterventionOutcome.STOPPED -> {
                 val stops = streaks.stops + 1
                 if (stops >= p.deescalateAfterStops && p.level > InterventionPolicyBounds.MIN_LEVEL) {

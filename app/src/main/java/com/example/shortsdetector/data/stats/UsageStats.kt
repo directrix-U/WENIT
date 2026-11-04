@@ -38,7 +38,7 @@ data class DailyWatch(val date: LocalDate, val watchMs: Long)
 
 /**
  * 단계별 멈춤 비율.
- * @param answered 결과가 기록된 개입 수. 결과를 모르는 개입은 비율에 넣지 않는다.
+ * @param answered 결과가 기록된 개입 수. 결과를 모르거나 앱이 닫은(INTERRUPTED) 개입은 비율에 넣지 않는다.
  * @param stopRate stopped / answered. answered 가 0 이면 null(0% 와 다르다).
  */
 data class LevelStopRate(val level: Int, val delivered: Int, val answered: Int, val stopped: Int, val stopRate: Double?)
@@ -61,7 +61,7 @@ data class StatsDataWindow(val fromMs: Long, val toMs: Long)
 
 /**
  * 오늘·이번 주 통계. 순수 함수. 저장소에서 [dataWindow] 범위를 읽어 넘기면 된다.
- * 시연 모드 개입은 기본으로 뺀다(includeDemo). 세션에는 시연 표시가 없어 시청시간에는 시연 중 시청도 들어간다.
+ * 시연 모드 세션과 개입은 기본으로 뺀다(includeDemo).
  *
  * 주는 월요일에 시작한다. 지난주 비교는 주 중간에도 공정하도록 같은 요일까지만 합산한다.
  * 다만 오늘은 아직 진행 중이고 지난주 같은 요일은 하루 전체라, 이른 시간에는 감소 쪽으로 치우친다.
@@ -89,7 +89,10 @@ object UsageStatsCalculator {
         includeDemo: Boolean = false
     ): TodayStats {
         val date = DailyUsageCalculator.dateOf(nowMs, zone)
-        return dayStats(sessions, chosen(interventions, includeDemo), goals, zone, date, dayFinished = false)
+        return dayStats(
+            chosenSessions(sessions, includeDemo), chosen(interventions, includeDemo), goals, zone, date,
+            dayFinished = false
+        )
     }
 
     /**
@@ -105,7 +108,10 @@ object UsageStatsCalculator {
         includeDemo: Boolean = false
     ): DayGoalResults {
         val date = DailyUsageCalculator.dateOf(nowMs, zone).minusDays(1)
-        val results = dayStats(sessions, chosen(interventions, includeDemo), goals, zone, date, dayFinished = true)
+        val results = dayStats(
+            chosenSessions(sessions, includeDemo), chosen(interventions, includeDemo), goals, zone, date,
+            dayFinished = true
+        )
         return DayGoalResults(date, results.goals)
     }
 
@@ -147,11 +153,12 @@ object UsageStatsCalculator {
     ): WeekStats {
         val date = DailyUsageCalculator.dateOf(nowMs, zone)
         val monday = weekStart(date)
-        val days = DailyUsageCalculator.aggregate(sessions, zone, monday, date)
+        val counted = chosenSessions(sessions, includeDemo)
+        val days = DailyUsageCalculator.aggregate(counted, zone, monday, date)
             .map { DailyWatch(it.date, it.estimatedWatchMs) }
         val total = days.sumOf { it.watchMs }
         val previous = DailyUsageCalculator
-            .aggregate(sessions, zone, monday.minusWeeks(1), date.minusWeeks(1))
+            .aggregate(counted, zone, monday.minusWeeks(1), date.minusWeeks(1))
             .sumOf { it.estimatedWatchMs }
         val thisWeek = chosen(interventions, includeDemo).filter {
             val d = DailyUsageCalculator.dateOf(it.occurredAtMs, zone)
@@ -172,13 +179,16 @@ object UsageStatsCalculator {
     private fun levelStopRates(delivered: List<InterventionRecord>): List<LevelStopRate> =
         (InterventionPolicyBounds.MIN_LEVEL..InterventionPolicyBounds.MAX_LEVEL).map { level ->
             val atLevel = delivered.filter { it.level == level }
-            val answered = atLevel.count { it.outcome != null }
+            val answered = atLevel.count { it.outcome != null && it.outcome != InterventionOutcome.INTERRUPTED }
             val stopped = atLevel.count { it.outcome == InterventionOutcome.STOPPED }
             LevelStopRate(
                 level, atLevel.size, answered, stopped,
                 if (answered > 0) stopped.toDouble() / answered else null
             )
         }
+
+    private fun chosenSessions(sessions: List<SessionRecord>, includeDemo: Boolean) =
+        if (includeDemo) sessions else sessions.filterNot { it.isDemo }
 
     private fun chosen(interventions: List<InterventionRecord>, includeDemo: Boolean) =
         if (includeDemo) interventions else interventions.filterNot { it.isDemo }

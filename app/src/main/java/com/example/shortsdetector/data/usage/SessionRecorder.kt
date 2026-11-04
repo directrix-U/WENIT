@@ -28,9 +28,11 @@ class SessionRecorder(
     private val store: UsageStore,
     private val clock: UsageClock,
     private val checkpointIntervalMs: Long = DEFAULT_CHECKPOINT_INTERVAL_MS,
+    /** 세션을 시작할 때 읽는다. 시작할 때의 값이 세션 끝까지 유지된다. */
+    private val isDemoMode: () -> Boolean = { false },
     private val newId: () -> String = { UUID.randomUUID().toString() }
 ) {
-    private class Tracked(val id: String, val startEpochMs: Long, val startElapsedMs: Long)
+    private class Tracked(val id: String, val startEpochMs: Long, val startElapsedMs: Long, val isDemo: Boolean)
 
     /** 열린 세션 또는 이어질 수 있는 직전 세션. 많아야 2개. */
     private val tracked = HashMap<Int, Tracked>()
@@ -93,20 +95,20 @@ class SessionRecorder(
     private fun onStarted(p: SessionProgress) {
         // 새 세션이 열리면 이전 세션은 더 이상 이어질 수 없다.
         tracked.clear()
-        tracked[p.sessionNumber] = Tracked(newId(), toEpoch(p.startedAtMs), p.startedAtMs)
+        tracked[p.sessionNumber] = Tracked(newId(), toEpoch(p.startedAtMs), p.startedAtMs, isDemoMode())
         writeOpen(p)
     }
 
     private fun onResumed(p: SessionProgress) {
         if (tracked[p.sessionNumber] == null) {
-            tracked[p.sessionNumber] = Tracked(newId(), toEpoch(p.startedAtMs), p.startedAtMs)
+            tracked[p.sessionNumber] = Tracked(newId(), toEpoch(p.startedAtMs), p.startedAtMs, isDemoMode())
         }
         writeOpen(p)
     }
 
     private fun onEnded(s: SessionSummary) {
         val t = tracked[s.sessionNumber]
-            ?: Tracked(newId(), toEpoch(s.startedAtMs), s.startedAtMs).also { tracked[s.sessionNumber] = it }
+            ?: Tracked(newId(), toEpoch(s.startedAtMs), s.startedAtMs, isDemoMode()).also { tracked[s.sessionNumber] = it }
         store.upsertSession(
             SessionRecord(
                 id = t.id,
@@ -122,7 +124,8 @@ class SessionRecorder(
                 maxConfidence = s.maxConfidence.name,
                 endReason = s.endReason.name,
                 exitCause = s.exitCause?.name,
-                resumeCount = s.resumeCount
+                resumeCount = s.resumeCount,
+                isDemo = t.isDemo
             )
         )
         // EXIT_CONFIRMED 만 이어질 수 있다(상태 머신 규칙과 같음).
@@ -147,7 +150,8 @@ class SessionRecorder(
                 maxConfidence = p.maxConfidence.name,
                 endReason = null,
                 exitCause = null,
-                resumeCount = p.resumeCount
+                resumeCount = p.resumeCount,
+                isDemo = t.isDemo
             )
         )
         lastCheckpointAt = p.lastObservedAtMs

@@ -31,6 +31,11 @@ object UserProfilePreferences {
 
     fun save(context: Context, profile: UserProfile) = write(prefs(context), profile)
 
+    /** 설문 완료 여부와 무관하게 동의 값만 읽고 쓴다(임시 스위치용). */
+    fun isAiConsentGiven(context: Context): Boolean = prefs(context).getBoolean(KEY_AI_CONSENT, false)
+
+    fun setAiConsent(context: Context, given: Boolean) = prefs(context).edit { putBoolean(KEY_AI_CONSENT, given) }
+
     /** 설문 응답을 지운다. 다시 미완료 상태가 된다. */
     fun clear(context: Context) = prefs(context).edit { clear() }
 

@@ -180,10 +180,10 @@ class InterventionFlowTest {
     }
 
     @Test
-    fun `demo mode continues after the demo threshold but level 3 stays five minutes`() {
+    fun `demo mode continues after the demo threshold and level 3 waits 30 seconds`() {
         assertEquals(30_000L, ReinterventionRule.afterWatchMs(1, CONTINUED, 30_000))
         assertEquals(30_000L, ReinterventionRule.afterWatchMs(2, CONTINUED, 30_000))
-        assertEquals(300_000L, ReinterventionRule.afterWatchMs(3, CONTINUED, 30_000))
+        assertEquals(30_000L, ReinterventionRule.afterWatchMs(3, CONTINUED, 30_000))
         assertNull(ReinterventionRule.afterWatchMs(1, STOPPED, 30_000))
     }
 
@@ -347,7 +347,7 @@ class InterventionFlowTest {
         show(); val two = coordinator.respond(CONTINUED)!!
         assertEquals(3, two.nextLevel)
         show(); val three = coordinator.respond(CONTINUED)!!
-        assertEquals(300_000L, three.reinterveneAfterWatchMs)
+        assertEquals(DemoMode.MORE_TIME_MS, three.reinterveneAfterWatchMs)
 
         assertEquals(3, effective().policy.level)
         assertEquals(saved, InterventionPolicyPreferences.read(prefs))

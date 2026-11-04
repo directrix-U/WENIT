@@ -70,6 +70,17 @@ class InterventionCoordinator(
     /** 반응 없이 사라졌을 때. 끝낼 개입이 없으면 아무 일도 없다. */
     fun abandon(): InterventionResult? = respond(InterventionOutcome.IGNORED)
 
+    /**
+     * 이탈 신호로 앱이 오버레이를 닫았을 때. 고른 이유가 있으면 남기고, 단계와 연속 횟수는 건드리지 않는다.
+     * @return 끝낼 개입이 없으면 null
+     */
+    fun interrupt(): InterventionResult? {
+        val p = pending ?: return null
+        pending = null
+        store.setInterventionOutcome(p.id, InterventionOutcome.INTERRUPTED, p.reason)
+        return InterventionResult(p.sessionNumber, p.level, p.level, InterventionOutcome.INTERRUPTED, null)
+    }
+
     /** @return 끝낼 개입이 없으면 null */
     fun respond(outcome: InterventionOutcome): InterventionResult? {
         val p = pending ?: return null
@@ -78,7 +89,7 @@ class InterventionCoordinator(
         when (outcome) {
             InterventionOutcome.STOPPED -> store.setInterventionAction(p.id, InterventionAction.OPEN_APP, clock.epochNowMs())
             InterventionOutcome.CONTINUED -> store.setInterventionAction(p.id, InterventionAction.DISMISS, clock.epochNowMs())
-            InterventionOutcome.IGNORED -> Unit
+            InterventionOutcome.IGNORED, InterventionOutcome.INTERRUPTED -> Unit
         }
 
         val before = policyStore.resolved()

@@ -198,6 +198,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `obscured_ms`: 일시 가림으로 별도 처리한 시간. Lv.3 카운트다운 시간도 시청시간에서 빼고 여기에 넣는다
 - `max_confidence_bucket`
 - `end_reason_code`
+- `is_demo`: boolean. 시연 모드 중 시작한 세션. 통계와 에이전트 입력에서 기본 제외
 
 ### `DetectionObservation`
 - `observation_id`: UUID
@@ -219,7 +220,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `cooldown_suppressed`: boolean
 - `level`: 개입 시점 단계 1~3 (DB 버전 1 기록은 null)
 - `user_reason`: fun / bored / tired / procrastinating / null
-- `outcome`: stopped / continued / ignored / null (서비스 시작 시 보여 줬지만 결과 없는 개입은 ignored 로 정리. DB 버전 1 기록은 null 유지)
+- `outcome`: stopped / continued / ignored / interrupted / null (interrupted: 이탈 신호로 앱이 오버레이를 닫음. 단계 규칙·멈춤 비율 제외. 서비스 시작 시 보여 줬지만 결과 없는 개입은 ignored 로 정리. DB 버전 1 기록은 null 유지)
 - `method`: popup / notification / failed / suppressed_by_cooldown / suppressed_by_daily_limit
 - `is_demo`: boolean. 시연 모드 기록은 통계와 에이전트 입력에서 기본 제외
 
@@ -288,7 +289,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - Lv.1 가벼운 알림 → Lv.2 성찰 질문 → Lv.3 숨 고르기. 단계 변경은 결정론적 규칙이 하고 `PolicyChange(source=rule)` 로 기록한다.
 - MVP: Lv.3 은 10초 한정 화면 덮기이고 홈·뒤로가기로 이탈할 수 있다. 출시 전 Play 정책을 재검토한다.
 - 10초 뒤 버튼으로 닫을 수 있고, 답이 없으면 30초 뒤 스스로 닫히며(ignored), 카운트다운 시간은 시청시간에서 뺀다.
-- 이탈 신호가 처음 잡히면 세션 종료 판정을 기다리지 않고 오버레이만 닫는다. 세션 종료 판정은 바뀌지 않는다.
+- 이탈 신호가 처음 잡히면 세션 종료 판정을 기다리지 않고 오버레이만 닫는다. 세션 종료 판정은 바뀌지 않는다. 같은 세션이 이어지고 기준을 넘었으면 쿨다운 뒤 다시 개입한다.
 - 정책의 `max_level` 을 2 로 두면 Lv.3 을 쓰지 않는다.
 
 ### 5.2 개입 후 화면
@@ -373,6 +374,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - 백그라운드에서 Activity를 강제로 띄우는 방식에 의존하지 않는다. 사용자 탭으로 알림에서 앱으로 이동하도록 한다.
 - 개인정보 최소 수집, 로컬 우선, 기록 보관 기간, 모든 로그 삭제, 서비스 중지·권한 해제 안내를 구현한다.
 - LLM 에이전트에 감지용 원본 UI 정보는 보내지 않는다. 서버 API 를 쓰면 개인별 집계 통계·개입 기록·사용자 목표가 외부로 나가므로, 전송 전에 별도 고지·동의, 전송 데이터 목록, 보관·삭제 정책을 설계하고 동의하지 않으면 규칙 기반 정책으로 동작한다. 에이전트가 개입 방식을 자동 조절한다는 사실을 앱과 정책 고지에 밝힌다.
+- MVP(2026-11-05): AI 목표 추천은 프로필의 AI 추천 동의가 true 일 때만 네트워크를 쓴다. 전송 데이터는 허용 목록으로 직렬화한 설문 응답·집계 통계·목표·정책 값뿐이다. API 키는 디버그 빌드에만 넣는다. 정식 고지·동의 화면과 보관·삭제 정책 설계는 아직 없다.
 - 접근성 이벤트·UI 트리 분석 기능은 사용자가 명시적으로 활성화한 상태에서만 동작한다. 기능을 끌 수 있어야 하고 해제 후에는 감지·기록이 중단되어야 한다.
 
 정책 참고:

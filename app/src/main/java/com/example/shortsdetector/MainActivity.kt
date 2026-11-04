@@ -9,14 +9,27 @@ import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
 import android.view.accessibility.AccessibilityManager
+import android.view.View
+import android.widget.Button
 import android.widget.RadioButton
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.example.shortsdetector.ai.AiGoalRecommender
+import com.example.shortsdetector.ai.ClaudeMessagesClient
+import com.example.shortsdetector.ai.GoalRecommendation
+import com.example.shortsdetector.ai.HttpUrlConnectionTransport
+import com.example.shortsdetector.ai.TestSurvey
 import com.example.shortsdetector.data.DetectionPreferences
 import com.example.shortsdetector.data.InterventionPolicyPreferences
+import com.example.shortsdetector.data.goal.Goal
+import com.example.shortsdetector.data.goal.GoalPreferences
+import com.example.shortsdetector.data.profile.UserProfile
+import com.example.shortsdetector.data.profile.UserProfilePreferences
+import com.example.shortsdetector.data.stats.AgentInputBuilder
 import com.example.shortsdetector.data.stats.SavedTimeBaselinePreferences
+import com.example.shortsdetector.data.stats.UsageStatsCalculator
 import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.InterventionAction
 import com.example.shortsdetector.data.usage.UsageDatabase
@@ -36,7 +49,8 @@ import com.example.shortsdetector.platform.DetectionStatus
  *  - 개입 기준 시간(정책 값)과 화면 중앙 팝업 사용 여부, 임시 시연 모드 스위치
  *  - 개입 팝업을 누르면 이 화면으로 온다([EXTRA_FROM_INTERVENTION])
  *  - 서비스가 연결된 경우에만 현재 감지 상태 표시
- *  - 사용 기록: 오늘 집계 한 줄 + 전체 삭제(확인 대화상자). 통계 화면은 다음 단계.
+ *  - 사용 기록: 오늘 집계 한 줄 + 전체 삭제, 시연 준비 초기화(둘 다 확인 대화상자). 통계 화면은 다음 단계.
+ *  - AI 목표 추천 임시 확인: 동의 스위치, 추천 버튼, 결과와 저장.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -80,6 +94,8 @@ class MainActivity : AppCompatActivity() {
 
         setupInterventionSettings()
         binding.buttonDeleteRecords.setOnClickListener { confirmDeleteRecords() }
+        binding.buttonResetForDemo.setOnClickListener { confirmResetForDemo() }
+        setupAiRecommendation()
         recordNotificationTap(intent)
 
         // 첫 실행이면 알림 권한을 미리 물어본다. 없으면 감지해도 알림이 안 뜬다.
@@ -113,7 +129,8 @@ class MainActivity : AppCompatActivity() {
             val today = LocalDate.now(zone)
             val from = today.atStartOfDay(zone).toInstant().toEpochMilli()
             val to = today.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-            val day = DailyUsageCalculator.aggregate(db.sessionsOverlapping(from, to), zone, today, today).single()
+            val sessions = db.sessionsOverlapping(from, to).filterNot { it.isDemo }
+            val day = DailyUsageCalculator.aggregate(sessions, zone, today, today).single()
             val total = db.sessionCount()
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
@@ -146,6 +163,97 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             .show()
+    }
+
+    /** 시연 직전에 쓴다: 기록 전체 삭제 + 단계 Lv.1 + 연속 횟수·하루 카운터 초기화. 설정값은 둔다. */
+    private fun confirmResetForDemo() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.dialog_reset_demo_title)
+            .setMessage(R.string.dialog_reset_demo_body)
+            .setNegativeButton(R.string.dialog_cancel, null)
+            .setPositiveButton(R.string.dialog_reset_demo_confirm) { _, _ ->
+                runIo {
+                    UsageDatabase.get(this).deleteAll()
+                    SavedTimeBaselinePreferences.clear(this)
+                    InterventionPolicyPreferences.resetForDemo(this)
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        Toast.makeText(this, R.string.toast_reset_demo_done, Toast.LENGTH_SHORT).show()
+                        refreshRecords()
+                        refreshStatus()
+                    }
+                }
+            }
+            .show()
+    }
+
+    private fun setupAiRecommendation() {
+        binding.switchAiConsent.isChecked = UserProfilePreferences.isAiConsentGiven(this)
+        binding.switchAiConsent.setOnCheckedChangeListener { _, checked ->
+            UserProfilePreferences.setAiConsent(this, checked)
+        }
+        binding.buttonAiRecommend.setOnClickListener { requestGoalRecommendation() }
+    }
+
+    /** 설문 화면이 없으므로 디버그 빌드는 고정 설문을 쓴다. 동의는 스위치 값을 따른다. */
+    private fun surveyForRecommendation(): UserProfile? =
+        UserProfilePreferences.load(this)
+            ?: if (BuildConfig.DEBUG) {
+                TestSurvey.profile.copy(aiRecommendationConsent = UserProfilePreferences.isAiConsentGiven(this))
+            } else {
+                null
+            }
+
+    private fun requestGoalRecommendation() {
+        binding.buttonAiRecommend.isEnabled = false
+        binding.textAiResult.setText(R.string.ai_loading)
+        binding.groupAiGoals.removeAllViews()
+        val profile = surveyForRecommendation()
+        val goals = GoalPreferences.load(this)
+        val policy = InterventionPolicyPreferences.resolve(this).policy
+        runIo {
+            val db = UsageDatabase.get(this)
+            val zone = ZoneId.systemDefault()
+            val now = System.currentTimeMillis()
+            val window = UsageStatsCalculator.dataWindow(now, zone)
+            val input = AgentInputBuilder.build(
+                profile, goals, policy,
+                db.sessionsOverlapping(window.fromMs, window.toMs),
+                db.interventionsBetween(window.fromMs, window.toMs),
+                db.recentPolicyChanges(RECENT_POLICY_CHANGES),
+                zone, now
+            )
+            val client = ClaudeMessagesClient(BuildConfig.ANTHROPIC_API_KEY, HttpUrlConnectionTransport())
+            val result = AiGoalRecommender(client).recommend(input)
+            Log.i(ShortsDetectionService.TAG, "AI 목표 추천: ${result.elapsedMs}ms 실패=${result.failure} HTTP=${result.httpStatus} 출처=${result.goals.map { it.source }}")
+            runOnUiThread { if (!isDestroyed) showRecommendation(result) }
+        }
+    }
+
+    private fun showRecommendation(result: GoalRecommendation) {
+        binding.buttonAiRecommend.isEnabled = true
+        binding.textAiResult.text = getString(
+            R.string.ai_result_summary, result.elapsedMs,
+            result.failure?.name ?: getString(R.string.ai_no_failure),
+            result.httpStatus?.toString() ?: "-"
+        )
+        for (goal in result.goals) {
+            binding.groupAiGoals.addView(
+                Button(this).apply {
+                    isAllCaps = false
+                    text = getString(R.string.ai_goal_item, goal.label, goal.reason.orEmpty(), goal.source.name)
+                    setOnClickListener { saveGoal(goal, this) }
+                }
+            )
+        }
+    }
+
+    private fun saveGoal(goal: Goal, button: View) {
+        val saved = GoalPreferences.put(this, goal)
+        if (saved) button.isEnabled = false
+        Toast.makeText(
+            this, if (saved) R.string.toast_goal_saved else R.string.toast_goal_full, Toast.LENGTH_SHORT
+        ).show()
     }
 
     /** DB 작업은 메인 스레드 밖에서. 실패는 화면에 "못 읽음"으로만 표시하고 원문을 남기지 않는다. */
@@ -276,6 +384,8 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** 개입 팝업에서 열렸음을 표시. 지금은 화면 구분 없이 같은 화면을 연다(개입 선택 화면은 다음 단계). */
         const val EXTRA_FROM_INTERVENTION = "from_intervention"
+
+        private const val RECENT_POLICY_CHANGES = 10
 
         /** 개입 알림을 눌렀을 때 반응을 기록할 개입 기록 id */
         const val EXTRA_INTERVENTION_ID = "intervention_id"
