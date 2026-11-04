@@ -86,6 +86,8 @@ interface AppRepository {
     fun revertAgentChange(): PolicyChangeRecord?
 
     fun isDemoMode(): Boolean
+    fun demoThresholdMs(): Long
+    fun setDemoThresholdMs(ms: Long)
     fun setDemoMode(enabled: Boolean)
     fun isPopupEnabled(): Boolean
     fun setPopupEnabled(enabled: Boolean)
@@ -103,6 +105,7 @@ interface AppRepository {
     fun recommendGoals(): GoalRecommendation
     fun deleteAllRecords()
     fun resetForDemo()
+    fun restartOnboarding()
     fun insertSeed(scenario: DemoSeedData.Scenario): Int
     fun runGoalEval(): Int
     fun recordNotificationTap(interventionId: String)
@@ -208,6 +211,10 @@ class AndroidAppRepository(context: Context) : AppRepository {
 
     override fun setDemoMode(enabled: Boolean) = InterventionPolicyPreferences.setDemoMode(app, enabled)
 
+    override fun demoThresholdMs() = InterventionPolicyPreferences.demoThresholdMs(app)
+
+    override fun setDemoThresholdMs(ms: Long) = InterventionPolicyPreferences.setDemoThresholdMs(app, ms)
+
     override fun isPopupEnabled() = DetectionPreferences.isPopupEnabled(app)
 
     override fun setPopupEnabled(enabled: Boolean) = DetectionPreferences.setPopupEnabled(app, enabled)
@@ -270,6 +277,13 @@ class AndroidAppRepository(context: Context) : AppRepository {
                 app.getString(R.string.policy_reason_demo_reset)
             )
         )
+    }
+
+    /** 시연 준비 초기화에 더해 설문·동의·목표까지 지운다. */
+    override fun restartOnboarding() {
+        resetForDemo()
+        GoalPreferences.clear(app)
+        UserProfilePreferences.clear(app)
     }
 
     override fun insertSeed(scenario: DemoSeedData.Scenario): Int {

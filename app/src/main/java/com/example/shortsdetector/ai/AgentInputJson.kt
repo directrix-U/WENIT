@@ -82,7 +82,6 @@ object AgentInputJson {
             JSONObject()
                 .put("dailyWatchMs", JSONArray().apply { input.week.days.forEach { put(it.watchMs) } })
                 .put("dailyAverageMs", input.week.dailyAverageMs)
-                .put("changeRatio", input.week.changeRatio ?: JSONObject.NULL)
                 .put(
                     "levelStopRates",
                     JSONArray().apply {

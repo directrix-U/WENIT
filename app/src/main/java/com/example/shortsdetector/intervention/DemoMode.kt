@@ -8,14 +8,17 @@ import com.example.shortsdetector.data.usage.InterventionOutcome
  */
 object DemoMode {
     const val THRESHOLD_MS = 10_000L
+
+    /** 무대에서는 20~30초를 권한다. 개발자 화면에서 고른다. */
+    val THRESHOLD_CHOICES_MS = listOf(THRESHOLD_MS, 20_000L, 30_000L)
     const val COOLDOWN_MS = 10_000L
     const val ESCALATE_AFTER_SKIPS = 1
 
     /** "5분만 더 보기" 를 시연에서 볼 수 있게 줄인 재개입 시간 */
     const val MORE_TIME_MS = 30_000L
 
-    fun overlay(saved: InterventionPolicy, demoLevel: Int): InterventionPolicy = saved.copy(
-        thresholdMs = THRESHOLD_MS,
+    fun overlay(saved: InterventionPolicy, demoLevel: Int, thresholdMs: Long = THRESHOLD_MS): InterventionPolicy = saved.copy(
+        thresholdMs = thresholdMs,
         cooldownMs = COOLDOWN_MS,
         escalateAfterSkips = ESCALATE_AFTER_SKIPS,
         level = demoLevel.coerceIn(InterventionPolicyBounds.MIN_LEVEL, saved.maxLevel)

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.shortsdetector.ai.AiFailureKind
 import com.example.shortsdetector.ai.agent.AgentMessages
+import com.example.shortsdetector.ai.agent.AgentRunStatus
 import com.example.shortsdetector.data.goal.Goal
 import com.example.shortsdetector.data.goal.GoalProgress
 import com.example.shortsdetector.data.goal.GoalRules
@@ -19,6 +20,7 @@ import com.example.shortsdetector.data.stats.SavedTime
 import com.example.shortsdetector.data.stats.SavedTimeCalculator
 import com.example.shortsdetector.data.stats.UsageStatsCalculator
 import com.example.shortsdetector.data.stats.WeekStats
+import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.DemoSeedData
 import com.example.shortsdetector.data.usage.InterventionMethod
 import com.example.shortsdetector.data.usage.InterventionRecord
@@ -240,22 +242,40 @@ data class HomeState(
     val lastChangeReason: String? = null,
     val yesterday: YesterdaySummary? = null,
     val savedTime: SavedTime? = null,
-    /** 개입 팝업에서 멈추고 넘어왔을 때의 시청시간 */
+    /** 개입 팝업에서 멈추고 넘어왔을 때의 시청시간. 닫기, 날짜 변경, 새 세션 시작 때 사라진다. */
     val stoppedAtMs: Long? = null
 )
 
 class HomeViewModel(private val repo: AppRepository, private val tasks: TaskRunner) :
     StateViewModel<HomeState>(HomeState()) {
 
+    /** 멈춘 시각. 멈춤 카드가 언제 낡았는지 판단한다. */
+    private var stoppedEpochMs: Long? = null
+
     fun refresh() {
-        tasks.run(work = { load() }, failed = { set { it.copy(loading = false) } }) { loaded ->
-            set { loaded.copy(stoppedAtMs = it.stoppedAtMs) }
+        tasks.run(work = { load() to isStopCardStale() }, failed = { set { it.copy(loading = false) } }) { (loaded, stale) ->
+            if (stale) stoppedEpochMs = null
+            set { loaded.copy(stoppedAtMs = if (stale) null else it.stoppedAtMs) }
         }
     }
 
-    fun showStopped(watchMs: Long) = set { it.copy(stoppedAtMs = watchMs) }
+    fun showStopped(watchMs: Long) {
+        stoppedEpochMs = repo.nowMs()
+        set { it.copy(stoppedAtMs = watchMs) }
+    }
 
-    fun dismissStopped() = set { it.copy(stoppedAtMs = null) }
+    fun dismissStopped() {
+        stoppedEpochMs = null
+        set { it.copy(stoppedAtMs = null) }
+    }
+
+    private fun isStopCardStale(): Boolean {
+        val at = stoppedEpochMs ?: return false
+        val zone = repo.zone()
+        val now = repo.nowMs()
+        if (DailyUsageCalculator.dateOf(at, zone) != DailyUsageCalculator.dateOf(now, zone)) return true
+        return repo.sessions(at, now + 1).any { it.startedAtMs > at }
+    }
 
     private fun load(): HomeState {
         if (repo.isAgentDue()) repo.runAgent()
@@ -360,6 +380,9 @@ class RecordsViewModel(private val repo: AppRepository, private val tasks: TaskR
 
 // --- h. 설정 ---
 
+/** 분석이 정책을 바꾸지 못했을 때 사용자에게 알릴 내용 */
+enum class AnalysisNotice { POLICY_KEPT, NOT_ENOUGH_DATA }
+
 data class SettingsState(
     val goals: List<Goal> = emptyList(),
     val maxLevel: Int = 3,
@@ -370,6 +393,7 @@ data class SettingsState(
     val demoMode: Boolean = false,
     val permissions: PermissionStatus = PermissionStatus(false, false, false),
     val analyzing: Boolean = false,
+    val analysisNotice: AnalysisNotice? = null,
     val lastResult: String? = null,
     val messages: AgentMessages? = null,
     val deleted: Boolean = false,
@@ -429,9 +453,17 @@ class SettingsViewModel(
 
     fun analyzeNow() {
         if (current.analyzing) return
-        set { it.copy(analyzing = true) }
-        tasks.run(work = { repo.runAgent() }, failed = { set { it.copy(analyzing = false) } }) {
-            set { s -> s.copy(analyzing = false) }
+        set { it.copy(analyzing = true, analysisNotice = null) }
+        tasks.run(
+            work = { repo.runAgent() },
+            failed = { set { it.copy(analyzing = false, analysisNotice = AnalysisNotice.POLICY_KEPT) } }
+        ) { result ->
+            val notice = when (result.status) {
+                AgentRunStatus.FAILED -> AnalysisNotice.POLICY_KEPT
+                AgentRunStatus.NOT_ENOUGH_DATA -> AnalysisNotice.NOT_ENOUGH_DATA
+                else -> null
+            }
+            set { it.copy(analyzing = false, analysisNotice = notice) }
             refresh()
         }
     }
@@ -459,17 +491,29 @@ class SettingsViewModel(
 
 data class DeveloperState(
     val thresholdMs: Long = 0,
+    val demoThresholdMs: Long = 0,
     val popupEnabled: Boolean = true,
     val working: Boolean = false,
     val seeded: Int? = null,
     val evalRows: Int? = null,
-    val resetDone: Boolean = false
+    val resetDone: Boolean = false,
+    val restarted: Boolean = false
 )
 
 class DeveloperViewModel(private val repo: AppRepository, private val tasks: TaskRunner) :
     StateViewModel<DeveloperState>(DeveloperState()) {
 
-    fun refresh() = set { it.copy(thresholdMs = repo.savedPolicy().thresholdMs, popupEnabled = repo.isPopupEnabled()) }
+    fun refresh() = set {
+        it.copy(
+            thresholdMs = repo.savedPolicy().thresholdMs, demoThresholdMs = repo.demoThresholdMs(),
+            popupEnabled = repo.isPopupEnabled()
+        )
+    }
+
+    fun setDemoThreshold(ms: Long) {
+        repo.setDemoThresholdMs(ms)
+        refresh()
+    }
 
     fun setPopup(enabled: Boolean) {
         repo.setPopupEnabled(enabled)
@@ -488,6 +532,9 @@ class DeveloperViewModel(private val repo: AppRepository, private val tasks: Tas
         set { it.copy(resetDone = true) }
         refresh()
     }
+
+    /** 발표 맨 앞에서 쓴다. 설문·동의·목표까지 지우고 첫 실행 화면으로 돌아간다. */
+    fun restartOnboarding() = work({ repo.restartOnboarding() }) { set { it.copy(restarted = true) } }
 
     private fun <T> work(job: () -> T, done: (T) -> Unit) {
         set { it.copy(working = true, seeded = null, evalRows = null, resetDone = false) }

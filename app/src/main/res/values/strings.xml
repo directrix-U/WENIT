@@ -180,7 +180,7 @@
     <string name="records_week">이번 주</string>
     <string name="records_chart_description">이번 주 요일별 시청 시간 막대그래프</string>
     <string name="records_average">하루 평균 %1$s</string>
-    <string name="records_change_none">지난주 기록이 없어서 비교할 수 없어요</string>
+    <string name="records_change_none">비교할 기록이 아직 부족해요</string>
     <string name="records_change_down">지난주보다 %1$d%% 줄었어요</string>
     <string name="records_change_up">지난주보다 %1$d%% 늘었어요</string>
     <string name="records_stop_rate">단계별 멈춤 비율</string>
@@ -228,4 +228,11 @@
     <string name="dev_scenarios">시연 데이터</string>
     <string name="dev_seed_done">개입 %1$d건을 넣었어요</string>
     <string name="policy_reason_demo_reset">시연 시작값으로 되돌렸어요</string>
+    <string name="settings_analysis_failed">분석하지 못해서 지금 정책을 그대로 쓰고 있어요.</string>
+    <string name="settings_analysis_no_data">개입 기록이 아직 적어서 분석하지 않았어요.</string>
+    <string name="settings_deleted">기록을 지웠어요.</string>
+    <string name="dev_demo_threshold">시연 모드 기준 시간</string>
+    <string name="dev_restart_onboarding">온보딩부터 다시 시작</string>
+    <string name="dev_restart_title">처음 화면으로 돌아갈까요?</string>
+    <string name="dev_restart_body">시연 준비 초기화에 더해 설문 답변, AI 동의, 목표까지 지우고 설문부터 다시 시작해요. 되돌릴 수 없어요.</string>
 </resources>

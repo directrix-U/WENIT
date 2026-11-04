@@ -200,7 +200,16 @@ private fun WenitApp(
                     )
                 }
                 composable(Routes.DEVELOPER) {
-                    DeveloperScreen(viewModel(factory = factory)) { nav.popBackStack() }
+                    DeveloperScreen(
+                        viewModel(factory = factory),
+                        onBack = { nav.popBackStack() },
+                        onRestarted = {
+                            nav.navigate(Routes.SURVEY) {
+                                popUpTo(nav.graph.id) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    )
                 }
             }
         }

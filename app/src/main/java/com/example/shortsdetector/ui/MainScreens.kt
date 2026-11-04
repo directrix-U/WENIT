@@ -37,6 +37,7 @@ import com.example.shortsdetector.ai.agent.AgentPolicyRules
 import com.example.shortsdetector.data.stats.DailyWatch
 import com.example.shortsdetector.data.stats.WeekStats
 import com.example.shortsdetector.data.usage.DemoSeedData
+import com.example.shortsdetector.intervention.DemoMode
 import com.example.shortsdetector.ui.theme.WenitTokens
 import java.time.Instant
 import java.time.ZoneId
@@ -182,7 +183,7 @@ private fun WeekCard(week: WeekStats) {
         val ratio = week.changeRatio
         Caption(
             when {
-                ratio == null -> stringResource(R.string.records_change_none)
+                ratio == null || !week.canCompare -> stringResource(R.string.records_change_none)
                 ratio <= 0 -> stringResource(R.string.records_change_down, (-ratio * 100).roundToInt())
                 else -> stringResource(R.string.records_change_up, (ratio * 100).roundToInt())
             }
@@ -272,6 +273,16 @@ fun SettingsScreen(vm: SettingsViewModel, onAddGoal: () -> Unit, onRecommend: ()
             enabled = !s.analyzing && s.agentEnabled && s.aiConsent,
             onClick = vm::analyzeNow
         )
+        s.analysisNotice?.let { notice ->
+            Caption(
+                stringResource(
+                    when (notice) {
+                        AnalysisNotice.POLICY_KEPT -> R.string.settings_analysis_failed
+                        AnalysisNotice.NOT_ENOUGH_DATA -> R.string.settings_analysis_no_data
+                    }
+                )
+            )
+        }
         s.lastResult?.let { Caption(stringResource(R.string.settings_last_result, it)) }
 
         SectionTitle(stringResource(R.string.settings_targets))
@@ -283,6 +294,7 @@ fun SettingsScreen(vm: SettingsViewModel, onAddGoal: () -> Unit, onRecommend: ()
 
         SectionTitle(stringResource(R.string.settings_records))
         SecondaryButton(stringResource(R.string.settings_delete_all)) { confirmDelete = true }
+        if (s.deleted) Caption(stringResource(R.string.settings_deleted))
 
         SwitchRow(stringResource(R.string.settings_demo_mode), s.demoMode, onChange = vm::setDemoMode)
         Text(
@@ -317,10 +329,12 @@ fun ConfirmDialog(title: String, body: String, confirm: String, onDismiss: () ->
 // --- i. 개발자 화면 ---
 
 @Composable
-fun DeveloperScreen(vm: DeveloperViewModel, onBack: () -> Unit) {
+fun DeveloperScreen(vm: DeveloperViewModel, onBack: () -> Unit, onRestarted: () -> Unit) {
     val s by vm.state.collectAsState()
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmRestart by remember { mutableStateOf(false) }
     OnResume(vm::refresh)
+    LaunchedEffect(s.restarted) { if (s.restarted) onRestarted() }
     ScreenColumn(Modifier.fillMaxSize()) {
         BackRow(onBack)
         Text(stringResource(R.string.dev_title), style = MaterialTheme.typography.headlineMedium)
@@ -330,6 +344,11 @@ fun DeveloperScreen(vm: DeveloperViewModel, onBack: () -> Unit) {
             SingleChoiceRow(durationText(ms), s.thresholdMs == ms) { vm.setThreshold(ms) }
         }
         SwitchRow(stringResource(R.string.switch_popup), s.popupEnabled, onChange = vm::setPopup)
+
+        SectionTitle(stringResource(R.string.dev_demo_threshold))
+        DemoMode.THRESHOLD_CHOICES_MS.forEach { ms ->
+            SingleChoiceRow(durationText(ms), s.demoThresholdMs == ms) { vm.setDemoThreshold(ms) }
+        }
 
         SectionTitle(stringResource(R.string.dev_scenarios))
         SecondaryButton(stringResource(R.string.button_seed_a), enabled = !s.working) { vm.seed(DemoSeedData.Scenario.LATE_NIGHT_SKIPPER) }
@@ -341,6 +360,16 @@ fun DeveloperScreen(vm: DeveloperViewModel, onBack: () -> Unit) {
 
         SecondaryButton(stringResource(R.string.button_reset_demo), enabled = !s.working) { confirmReset = true }
         if (s.resetDone) Caption(stringResource(R.string.toast_reset_demo_done))
+        SecondaryButton(stringResource(R.string.dev_restart_onboarding), enabled = !s.working) { confirmRestart = true }
+    }
+    if (confirmRestart) {
+        ConfirmDialog(
+            stringResource(R.string.dev_restart_title), stringResource(R.string.dev_restart_body),
+            stringResource(R.string.dialog_reset_demo_confirm), { confirmRestart = false }
+        ) {
+            confirmRestart = false
+            vm.restartOnboarding()
+        }
     }
     if (confirmReset) {
         ConfirmDialog(

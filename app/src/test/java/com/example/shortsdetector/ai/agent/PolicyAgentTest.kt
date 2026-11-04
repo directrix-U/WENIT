@@ -445,6 +445,7 @@ class PolicyAgentTest {
         agent().run(i)
         assertFalse("com.google" in sentBody!!)
         assertFalse("seed-" in sentBody!!)
+        assertFalse("changeRatio" in sentBody!!)      // 지난주 비교값은 보내지 않는다
         val recent = AgentInputJson.toJson(i).getJSONObject("recent")
         assertEquals(7, recent.getJSONArray("dailyWatchMs").length())
         assertTrue(recent.getJSONObject("lv2Reasons").length() > 0)

@@ -87,7 +87,10 @@ class ViewModelsTest {
             Goal(GoalType.SELF_STOPS, 1, "하루 한 번", "이유", GoalSource.AI)
         )
 
-        override fun nowMs() = now
+        var clockMs = this@ViewModelsTest.now
+        var demoThreshold = 10_000L
+        var restarts = 0
+        override fun nowMs() = clockMs
         override fun zone() = this@ViewModelsTest.zone
         override fun profile() = savedProfile
         override fun saveProfile(profile: UserProfile) { savedProfile = profile }
@@ -125,6 +128,9 @@ class ViewModelsTest {
         }
         override fun isDemoMode() = demoOn
         override fun setDemoMode(enabled: Boolean) { demoOn = enabled }
+        override fun demoThresholdMs() = demoThreshold
+        override fun setDemoThresholdMs(ms: Long) { demoThreshold = ms }
+        override fun restartOnboarding() { restarts++ }
         override fun isPopupEnabled() = true
         override fun setPopupEnabled(enabled: Boolean) = Unit
         override fun isYouTubeEnabled() = true
@@ -414,6 +420,38 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `stop card goes away when the date changes`() {
+        val vm = HomeViewModel(repo, Direct)
+        vm.showStopped(3 * minute)
+        repo.clockMs = at(today.plusDays(1), 9)
+        vm.refresh()
+        assertNull(vm.state.value.stoppedAtMs)
+    }
+
+    @Test
+    fun `stop card goes away when a new session starts, including a demo one`() {
+        for (demo in listOf(false, true)) {
+            val vm = HomeViewModel(repo, Direct)
+            repo.sessionList.clear()
+            vm.showStopped(3 * minute)
+            repo.sessionList += session(repo.clockMs + 60_000, minute, demo)
+            repo.clockMs += 120_000
+            vm.refresh()
+            assertNull(vm.state.value.stoppedAtMs)
+        }
+    }
+
+    @Test
+    fun `the session that was stopped does not clear its own card`() {
+        repo.sessionList += session(repo.clockMs - 5 * minute, 5 * minute)
+        val vm = HomeViewModel(repo, Direct)
+        vm.showStopped(5 * minute)
+        repo.clockMs += minute
+        vm.refresh()
+        assertEquals(5 * minute, vm.state.value.stoppedAtMs)
+    }
+
+    @Test
     fun `home warns when the service is off and runs the agent when due`() {
         repo.permission = PermissionStatus(false, true, false)
         repo.agentDue = true
@@ -506,6 +544,23 @@ class ViewModelsTest {
     }
 
     @Test
+    fun `failed analysis tells the policy is kept and a good run clears it`() {
+        var status = AgentRunStatus.FAILED
+        val failing = object : AppRepository by repo {
+            override fun runAgent() = AgentRunResult(status, InterventionPolicy(), InterventionPolicy(), 1)
+        }
+        val vm = SettingsViewModel(failing, Direct, debugBuild = true)
+        vm.analyzeNow()
+        assertEquals(AnalysisNotice.POLICY_KEPT, vm.state.value.analysisNotice)
+        status = AgentRunStatus.NOT_ENOUGH_DATA
+        vm.analyzeNow()
+        assertEquals(AnalysisNotice.NOT_ENOUGH_DATA, vm.state.value.analysisNotice)
+        status = AgentRunStatus.CHANGED
+        vm.analyzeNow()
+        assertNull(vm.state.value.analysisNotice)
+    }
+
+    @Test
     fun `analyze now runs once and finishes`() {
         val vm = SettingsViewModel(repo, Direct, debugBuild = true)
         vm.analyzeNow()
@@ -549,6 +604,22 @@ class ViewModelsTest {
         assertEquals(1, repo.resets)
         assertTrue(vm.state.value.resetDone)
         assertFalse(vm.state.value.working)
+    }
+
+    @Test
+    fun `restart onboarding reports back so the app can return to the survey`() {
+        val vm = DeveloperViewModel(repo, Direct)
+        vm.restartOnboarding()
+        assertEquals(1, repo.restarts)
+        assertTrue(vm.state.value.restarted)
+    }
+
+    @Test
+    fun `demo threshold is chosen on the developer screen`() {
+        val vm = DeveloperViewModel(repo, Direct)
+        vm.setDemoThreshold(30_000)
+        assertEquals(30_000, repo.demoThreshold)
+        assertEquals(30_000, vm.state.value.demoThresholdMs)
     }
 
     // --- 6단계 후속 ---

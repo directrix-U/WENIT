@@ -57,8 +57,17 @@ data class WeekStats(
     val changeMs: Long,
     /** (이번 주 - 지난주) / 지난주. 지난주 기록이 0 이면 null. */
     val changeRatio: Double?,
-    val levelStopRates: List<LevelStopRate>
-)
+    val levelStopRates: List<LevelStopRate>,
+    /** 지난주 월~일 중 시청 기록이 있는 날 수 */
+    val previousWeekRecordDays: Int
+) {
+    /** 지난주 기록이 적으면 비율이 의미 없이 커진다. 숫자를 깎지 않고 비교를 숨긴다. */
+    val canCompare: Boolean get() = changeRatio != null && previousWeekRecordDays >= MIN_COMPARE_DAYS
+
+    companion object {
+        const val MIN_COMPARE_DAYS = 3
+    }
+}
 
 data class TimeSlotWatch(val slot: WatchTimeSlot, val watchMs: Long)
 
@@ -187,6 +196,9 @@ object UsageStatsCalculator {
         val previous = DailyUsageCalculator
             .aggregate(counted, zone, monday.minusWeeks(1), date.minusWeeks(1))
             .sumOf { it.estimatedWatchMs }
+        val recordDays = DailyUsageCalculator
+            .aggregate(counted, zone, monday.minusWeeks(1), monday.minusDays(1))
+            .count { it.estimatedWatchMs > 0L }
         val thisWeek = chosen(interventions, includeDemo).filter {
             val d = DailyUsageCalculator.dateOf(it.occurredAtMs, zone)
             it.method in DELIVERED && !d.isBefore(monday) && !d.isAfter(date)
@@ -198,7 +210,8 @@ object UsageStatsCalculator {
             previousPeriodWatchMs = previous,
             changeMs = total - previous,
             changeRatio = if (previous > 0L) (total - previous).toDouble() / previous else null,
-            levelStopRates = levelStopRates(thisWeek)
+            levelStopRates = levelStopRates(thisWeek),
+            previousWeekRecordDays = recordDays
         )
     }
 
