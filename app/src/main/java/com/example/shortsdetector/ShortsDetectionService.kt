@@ -2,11 +2,13 @@ package com.example.shortsdetector
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.KeyguardManager
 import android.content.SharedPreferences
 import android.graphics.Point
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import android.view.WindowManager
@@ -435,13 +437,13 @@ class ShortsDetectionService : AccessibilityService() {
     }
 
     private fun observe(now: Long): EngineOutput {
-        // 루트를 못 얻는 경우(전환 중, 알림창, 홈 등)는 원인을 구분할 수 없다. 이탈 대기로 넘긴다.
+        // 루트를 못 얻는 경우(전환 중, 홈 등)는 원인을 구분할 수 없다. 이탈 대기로 넘긴다.
         val root: AccessibilityNodeInfo = getRootInActiveWindow() ?: return engine.onRootUnavailable(now)
 
         try {
             val pkg = root.packageName?.toString()
             // 활성 창이 대상 앱이 아니면(시스템 다이얼로그 등) 판정하지 않는다.
-            val adapter = engine.adapterFor(pkg) ?: return engine.onForeignWindow(now, pkg)
+            val adapter = engine.adapterFor(pkg) ?: return engine.onForeignWindow(now, pkg, isUserPresent())
 
             val started = SystemClock.elapsedRealtime()
             val snapshot = snapshotter.capture(
@@ -463,6 +465,13 @@ class ShortsDetectionService : AccessibilityService() {
                 root.recycle()
             }
         }
+    }
+
+    /** 화면이 켜져 있고 잠금이 풀렸는지. 확인할 수 없으면 false 로 두어 이탈 판정을 그대로 탄다. */
+    private fun isUserPresent(): Boolean {
+        val interactive = getSystemService(PowerManager::class.java)?.isInteractive == true
+        val locked = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked != false
+        return interactive && !locked
     }
 
     private fun handleOutput(output: EngineOutput, source: String) {

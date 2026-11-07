@@ -8,7 +8,10 @@ enum class WindowStatus {
     /** 활성 창이 다른 앱/시스템 UI 다(시스템 대화상자, 다른 앱 등). */
     FOREIGN,
 
-    /** rootInActiveWindow 를 얻지 못했다(전환 중, 알림창, 홈 화면 등 — 원인은 구분 불가). */
+    /** 잠금이 풀린 화면에서 시스템 UI 창이 활성이다(알림창, 빠른 설정). 그 아래 앱은 그대로라 이탈이 아니다. */
+    SYSTEM_PANEL,
+
+    /** rootInActiveWindow 를 얻지 못했다(전환 중, 홈 화면 등 — 원인은 구분 불가). */
     UNAVAILABLE
 }
 
@@ -28,6 +31,8 @@ data class Observation(
         fun unavailable(atMs: Long) = Observation(atMs, WindowStatus.UNAVAILABLE)
         fun foreign(atMs: Long, packageName: String?) =
             Observation(atMs, WindowStatus.FOREIGN, packageName)
+        fun systemPanel(atMs: Long, packageName: String?) =
+            Observation(atMs, WindowStatus.SYSTEM_PANEL, packageName)
     }
 }
 

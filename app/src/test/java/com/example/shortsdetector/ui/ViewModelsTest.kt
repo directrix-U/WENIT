@@ -61,6 +61,7 @@ class ViewModelsTest {
     }
 
     private inner class FakeRepo : AppRepository {
+        var seedData = false
         var savedProfile: UserProfile? = null
         var onboardingDone = false
         var consent = false
@@ -149,6 +150,8 @@ class ViewModelsTest {
         override fun deleteAllRecords() { deleted++ }
         override fun resetForDemo() { resets++ }
         override fun insertSeed(scenario: DemoSeedData.Scenario) = 7
+        override fun hasSeedData() = seedData
+        override fun deleteSeedData() { seedData = false }
         override fun runGoalEval() = 15
         override fun recordNotificationTap(interventionId: String) = Unit
     }
@@ -692,5 +695,25 @@ class ViewModelsTest {
         assertFalse("잠깐, 지금 계속 볼까요?" in p)
         assertFalse("지금 보는 이유가 뭘까요?" in p)
         assertTrue("perSessionGoalMinutes" in p)
+    }
+
+    @Test
+    fun `settings shows seed notice while seed data exists and clears it at once`() {
+        repo.seedData = true
+        val vm = SettingsViewModel(repo, Direct, debugBuild = true)
+        vm.refresh()
+        assertTrue(vm.state.value.hasSeedData)
+
+        vm.deleteSeedData()
+
+        assertFalse(vm.state.value.hasSeedData)
+        assertFalse(repo.seedData)
+    }
+
+    @Test
+    fun `settings shows no seed notice without seed data`() {
+        val vm = SettingsViewModel(repo, Direct, debugBuild = true)
+        vm.refresh()
+        assertFalse(vm.state.value.hasSeedData)
     }
 }

@@ -352,4 +352,47 @@ class ShortformStateMachineTest {
         assertNotNull(value)
         return value!!
     }
+
+    @Test
+    fun `system panel keeps the session and does not count as watch`() {
+        val m = estimated()
+        for (t in 3_000L..12_000L step 1_000L) {
+            val s = m.onObservation(Observation.systemPanel(t, "com.android.systemui"))
+            assertEquals(DetectionState.TEMPORARILY_OBSCURED, s.current)
+            assertNull(s.endedSession)
+        }
+        assertEquals(1_000L, m.sessionWatchMs) // 창이 내려오기 전 1초만 시청
+
+        assertEquals(DetectionState.SHORTFORM_ESTIMATED, m.onObservation(shorts(13_000)).current)
+        m.onObservation(shorts(14_000))
+        assertEquals(2_000L, m.sessionWatchMs)
+    }
+
+    @Test
+    fun `system panel cancels a running exit grace`() {
+        val m = estimated()
+        m.onObservation(Observation.unavailable(3_000))
+        assertEquals(DetectionState.EXIT_PENDING, m.state)
+        m.onObservation(Observation.systemPanel(3_500, null))
+        assertEquals(DetectionState.TEMPORARILY_OBSCURED, m.state)
+        assertNull(m.onObservation(Observation.systemPanel(6_000, null)).endedSession)
+    }
+
+    @Test
+    fun `leaving for another app from the system panel still ends after grace`() {
+        val m = estimated()
+        m.onObservation(Observation.systemPanel(3_000, null))
+        m.onObservation(Observation.foreign(4_000, "other.app"))
+        m.onObservation(Observation.foreign(5_000, "other.app"))
+        val end = assertNotNullAndGet(m.onObservation(Observation.foreign(6_000, "other.app")).endedSession)
+        assertEquals(ExitCause.FOREIGN_WINDOW, end.exitCause)
+    }
+
+    @Test
+    fun `system panel without a session stays outside and starts nothing`() {
+        val m = ShortformStateMachine(tuning)
+        val s = m.onObservation(Observation.systemPanel(1_000, null))
+        assertEquals(DetectionState.OUTSIDE_TARGET, s.current)
+        assertNull(s.startedSession)
+    }
 }

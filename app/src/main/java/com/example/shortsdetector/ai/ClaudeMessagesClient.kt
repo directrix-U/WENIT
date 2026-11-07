@@ -47,12 +47,9 @@ class HttpUrlConnectionTransport : AiTransport {
             headers.forEach(connection::setRequestProperty)
             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
-            // 오류 응답 본문은 쓰지 않는다. 상태 코드만으로 구분한다.
-            val text = if (status in 200..299) {
-                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            } else {
-                ""
-            }
+            // 오류 본문은 원인 구분에만 쓴다. 호출 측이 type·message 만 뽑아 쓰고 원문은 남기지 않는다.
+            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
             return AiHttpResponse(status, text)
         } finally {
             connection.disconnect()
@@ -66,9 +63,14 @@ class HttpUrlConnectionTransport : AiTransport {
 
 /**
  * Messages API 호출 한 번. 재시도하지 않는다(실패하면 호출 측이 규칙 기반 추천으로 대체한다).
- * 응답 원문과 키는 로그에 남기지 않는다. 호출 스레드에서 동기로 동작한다.
+ * 성공 응답 원문과 키는 로그에 남기지 않는다. HTTP 오류는 [describeError] 결과만 [logError] 로 넘긴다.
+ * 호출 스레드에서 동기로 동작한다.
  */
-class ClaudeMessagesClient(apiKey: String, private val transport: AiTransport) {
+class ClaudeMessagesClient(
+    apiKey: String,
+    private val transport: AiTransport,
+    private val logError: (String) -> Unit = {}
+) {
 
     private val key = apiKey.trim()
 
@@ -84,7 +86,10 @@ class ClaudeMessagesClient(apiKey: String, private val transport: AiTransport) {
         } catch (e: IOException) {
             return AiResult.Failure(AiFailureKind.NETWORK)
         }
-        if (response.status !in 200..299) return AiResult.Failure(AiFailureKind.HTTP_ERROR, response.status)
+        if (response.status !in 200..299) {
+            logError(describeError(response))
+            return AiResult.Failure(AiFailureKind.HTTP_ERROR, response.status)
+        }
         return try {
             parse(response.body)
         } catch (e: JSONException) {
@@ -114,6 +119,19 @@ class ClaudeMessagesClient(apiKey: String, private val transport: AiTransport) {
                     .put("format", JSONObject().put("type", "json_schema").put("schema", schema))
             )
 
+    /** 오류 본문에서 type·message 만 꺼낸다. 메시지에 키가 들어 있어도 가린다. */
+    internal fun describeError(response: AiHttpResponse): String {
+        val error = try {
+            JSONObject(response.body).optJSONObject("error")
+        } catch (e: JSONException) {
+            null
+        }
+        val type = error?.optString("type").orEmpty().ifEmpty { "unknown" }
+        val message = error?.optString("message").orEmpty().ifEmpty { "(본문에 오류 메시지 없음)" }
+        val safe = if (key.isEmpty()) message else message.replace(key, "***")
+        return "HTTP ${response.status} type=$type message=${safe.take(MAX_LOGGED_MESSAGE)}"
+    }
+
     /** thinking 블록이 앞에 올 수 있으므로 위치가 아니라 type 으로 text 블록을 찾는다. */
     private fun parse(body: String): AiResult {
         val message = JSONObject(body)
@@ -141,5 +159,7 @@ class ClaudeMessagesClient(apiKey: String, private val transport: AiTransport) {
 
         /** Haiku 5.5 는 thinking 이 기본으로 켜진다. 짧은 판단이라 낮춰 지연과 토큰을 줄인다. */
         private const val EFFORT = "low"
+
+        private const val MAX_LOGGED_MESSAGE = 300
     }
 }

@@ -121,6 +121,11 @@ class UsageDatabase private constructor(context: Context) :
         )
     }
 
+    override fun hasSeedRecords(): Boolean = readableDatabase.rawQuery(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE is_seed = 1) OR EXISTS(SELECT 1 FROM interventions WHERE is_seed = 1)",
+        null
+    ).use { it.moveToFirst() && it.getInt(0) != 0 }
+
     override fun deleteSeedRecords() {
         val db = writableDatabase
         db.beginTransaction()

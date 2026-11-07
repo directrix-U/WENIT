@@ -162,8 +162,15 @@ class DetectionEngine(
 
     fun onRootUnavailable(atMs: Long): EngineOutput = onObservation(Observation.unavailable(atMs))
 
-    fun onForeignWindow(atMs: Long, packageName: String?): EngineOutput =
-        onObservation(Observation.foreign(atMs, packageName))
+    /**
+     * 활성 창이 대상 앱이 아니다.
+     * @param userPresent 화면이 켜져 있고 잠겨 있지 않다. 잠금 화면도 시스템 UI 창이라 이 값으로 알림창과 구분한다.
+     */
+    fun onForeignWindow(atMs: Long, packageName: String?, userPresent: Boolean = false): EngineOutput =
+        onObservation(
+            if (userPresent && packageName == SYSTEM_UI_PACKAGE) Observation.systemPanel(atMs, packageName)
+            else Observation.foreign(atMs, packageName)
+        )
 
     /**
      * 관찰 단계에서 예외가 났을 때. 모르는 화면으로 취급해 세션을 바로 끊지 않는다.
@@ -252,5 +259,10 @@ class DetectionEngine(
             exitSignalStarted = step.current == DetectionState.EXIT_PENDING &&
                 step.previous != DetectionState.EXIT_PENDING
         )
+    }
+
+    companion object {
+        /** TODO: VERIFY ON DEVICE — 다른 제조사 */
+        const val SYSTEM_UI_PACKAGE = "com.android.systemui"
     }
 }

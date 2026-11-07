@@ -215,6 +215,7 @@
     <string name="settings_analyze_now">지금 분석</string>
     <string name="settings_analyzing">분석하고 있어요</string>
     <string name="settings_last_result">마지막 분석: %1$s</string>
+    <string name="settings_seed_in_use">예시 데이터 사용 중</string>
     <string name="settings_targets">감지할 앱</string>
     <string name="settings_instagram">Instagram Reels (실험 중)</string>
     <string name="settings_permissions">권한 상태</string>

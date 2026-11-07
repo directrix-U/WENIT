@@ -249,6 +249,12 @@ fun SettingsScreen(vm: SettingsViewModel, onAddGoal: () -> Unit, onRecommend: ()
     }
     ScreenColumn(Modifier.fillMaxSize()) {
         Text(stringResource(R.string.tab_settings), style = MaterialTheme.typography.headlineMedium)
+        if (s.hasSeedData) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.settings_seed_in_use), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                TextButton(vm::deleteSeedData) { Text(stringResource(R.string.action_remove)) }
+            }
+        }
 
         SectionTitle(stringResource(R.string.settings_goals))
         if (s.goals.isEmpty()) Caption(stringResource(R.string.settings_goals_empty))

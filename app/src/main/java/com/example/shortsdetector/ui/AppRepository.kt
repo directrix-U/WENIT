@@ -108,6 +108,8 @@ interface AppRepository {
     fun resetForDemo()
     fun restartOnboarding()
     fun insertSeed(scenario: DemoSeedData.Scenario): Int
+    fun hasSeedData(): Boolean
+    fun deleteSeedData()
     fun runGoalEval(): Int
     fun recordNotificationTap(interventionId: String)
 }
@@ -185,7 +187,9 @@ class AndroidAppRepository(context: Context) : AppRepository {
     override fun isAgentDue() =
         AgentSchedule.isDue(nowMs(), AgentPreferences.lastRunAtMs(app), isAgentEnabled(), profile()?.aiRecommendationConsent == true)
 
-    private fun client() = ClaudeMessagesClient(BuildConfig.ANTHROPIC_API_KEY, HttpUrlConnectionTransport())
+    private fun client() = ClaudeMessagesClient(BuildConfig.ANTHROPIC_API_KEY, HttpUrlConnectionTransport()) { message ->
+        Log.w(ShortsDetectionService.TAG, "AI 호출 실패: $message")
+    }
 
     private fun agent() = PolicyAgent(
         client(),
@@ -293,6 +297,14 @@ class AndroidAppRepository(context: Context) : AppRepository {
         batch.sessions.forEach(db::upsertSession)
         batch.interventions.forEach(db::insertIntervention)
         return batch.interventions.size
+    }
+
+    override fun hasSeedData() = db.hasSeedRecords()
+
+    /** 시드가 섞인 첫 주 평균이 남지 않게 아낀 시간 기준값도 다시 계산한다. */
+    override fun deleteSeedData() {
+        db.deleteSeedRecords()
+        SavedTimeBaselinePreferences.clear(app)
     }
 
     /** 디버그 전용: 설문 조합을 실제 호출해 앱 캐시 파일에 쓴다. 응답 내용을 로그에 남기지 않기 위함이다. */

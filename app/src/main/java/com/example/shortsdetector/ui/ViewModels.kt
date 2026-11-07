@@ -393,6 +393,7 @@ data class SettingsState(
     val youtube: Boolean = true,
     val instagram: Boolean = false,
     val demoMode: Boolean = false,
+    val hasSeedData: Boolean = false,
     val permissions: PermissionStatus = PermissionStatus(false, false, false),
     val analyzing: Boolean = false,
     val analysisNotice: AnalysisNotice? = null,
@@ -409,13 +410,20 @@ class SettingsViewModel(
     private val debugBuild: Boolean
 ) : StateViewModel<SettingsState>(SettingsState()) {
 
-    fun refresh() = set {
-        it.copy(
-            goals = repo.goals(), maxLevel = repo.savedPolicy().maxLevel, aiConsent = repo.isAiConsentGiven(),
-            agentEnabled = repo.isAgentEnabled(), youtube = repo.isYouTubeEnabled(), instagram = repo.isInstagramEnabled(),
-            demoMode = repo.isDemoMode(), permissions = repo.permissions(), lastResult = repo.lastAgentResult(),
-            messages = repo.agentMessages()
-        )
+    fun refresh() {
+        set {
+            it.copy(
+                goals = repo.goals(), maxLevel = repo.savedPolicy().maxLevel, aiConsent = repo.isAiConsentGiven(),
+                agentEnabled = repo.isAgentEnabled(), youtube = repo.isYouTubeEnabled(), instagram = repo.isInstagramEnabled(),
+                demoMode = repo.isDemoMode(), permissions = repo.permissions(), lastResult = repo.lastAgentResult(),
+                messages = repo.agentMessages()
+            )
+        }
+        tasks.run(work = { repo.hasSeedData() }) { has -> set { it.copy(hasSeedData = has) } }
+    }
+
+    fun deleteSeedData() {
+        tasks.run(work = { repo.deleteSeedData() }) { set { it.copy(hasSeedData = false) } }
     }
 
     fun removeGoal(type: GoalType) {

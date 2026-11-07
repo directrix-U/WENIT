@@ -505,4 +505,40 @@ class DetectionEngineScenarioTest {
         // 쿨다운(30초) 안이지만 이전 개입이 실제로 표시되지 않았으므로 다시 시도한다
         assertEquals(2, second)
     }
+
+    @Test
+    fun `notification shade while unlocked keeps the session and the notification`() {
+        val e = engine()
+        var t = e.enterShorts(0).observation.atMs
+        repeat(10) {
+            t += 1_000
+            val out = e.onForeignWindow(t, DetectionEngine.SYSTEM_UI_PACKAGE, userPresent = true)
+            assertEquals(WindowStatus.SYSTEM_PANEL, out.observation.window)
+            assertFalse(out.cancelNotification)
+            assertFalse(out.exitSignalStarted)
+        }
+        assertEquals(DetectionState.TEMPORARILY_OBSCURED, e.state)
+    }
+
+    @Test
+    fun `system ui on the lock screen is an exit, not a shade`() {
+        val e = engine()
+        var t = e.enterShorts(0).observation.atMs
+        var cancelled = false
+        repeat(4) {
+            t += 1_000
+            cancelled = e.onForeignWindow(t, DetectionEngine.SYSTEM_UI_PACKAGE, userPresent = false).cancelNotification || cancelled
+        }
+        assertTrue(cancelled)
+    }
+
+    @Test
+    fun `another app's window is an exit even when the user is present`() {
+        val e = engine()
+        var t = e.enterShorts(0).observation.atMs
+        t += 1_000
+        val out = e.onForeignWindow(t, "com.other.app", userPresent = true)
+        assertEquals(WindowStatus.FOREIGN, out.observation.window)
+        assertTrue(out.exitSignalStarted)
+    }
 }

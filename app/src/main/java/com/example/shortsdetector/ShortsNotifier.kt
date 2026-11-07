@@ -65,8 +65,12 @@ object ShortsNotifier {
         val contentIntent = PendingIntent.getActivity(
             context,
             0,
+            // NO_USER_ACTION: 영상 앱이 "사용자가 나간다" 는 신호를 받지 않게 해 작은 창(PiP) 전환을 막는다.
             Intent(context, WenitActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                .addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                        Intent.FLAG_ACTIVITY_NO_USER_ACTION
+                )
                 .putExtra(WenitActivity.EXTRA_FROM_INTERVENTION, true)
                 .putExtra(WenitActivity.EXTRA_INTERVENTION_ID, interventionId),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE

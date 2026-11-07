@@ -45,6 +45,8 @@ data class Step(
  *  - 이탈 신호(root 없음, 다른 창, 숏폼 신호 없음)가 와도 바로 끝내지 않고 EXIT_PENDING 에서
  *    exitGraceMs 동안 기다린다. 알림창을 잠깐 내리거나 root 가 순간적으로 null 인 경우에 세션이
  *    끊겼다가 다시 시작되던 문제(기존에는 재알림 쿨다운으로만 가렸음)를 막는다.
+ *  - 알림창·빠른 설정(SYSTEM_PANEL)은 이탈이 아니라 일시 가림이다. 플레이어가 보이지 않으므로 OVERLAY 처럼
+ *    시청시간에 넣지 않는다. 이탈 대기 중에 들어오면 대기를 끝낸다(창이 내려오는 순간 root 가 잠깐 비는 경우).
  *  - 중복/역순 관찰(같은 시각 이하)은 무시한다.
  *  - EXIT_CONFIRMED 로 끝난 세션은 sessionResumeWindowMs 안에 같은 앱에서 다시 진입(진입 규칙은 동일)하면
  *    같은 세션으로 이어 간다. 번호·누적 시간이 유지되므로 개입 판정도 이어진다. 끊긴 구간은 세지 않는다.
@@ -201,6 +203,11 @@ class ShortformStateMachine(private val tuning: DetectionTuning = DetectionTunin
     }
 
     private fun handleActive(obs: Observation, kind: VerdictKind?, open: OpenSession): SessionSummary? {
+        if (obs.window == WindowStatus.SYSTEM_PANEL) {
+            state = DetectionState.TEMPORARILY_OBSCURED
+            open.obscuredByPartial = false
+            return null
+        }
         when (kind) {
             VerdictKind.SHORTFORM -> {
                 val c = obs.verdict?.confidence ?: Confidence.LOW
@@ -226,7 +233,7 @@ class ShortformStateMachine(private val tuning: DetectionTuning = DetectionTunin
 
     private fun exitCauseOf(obs: Observation, kind: VerdictKind?): ExitCause = when (obs.window) {
         WindowStatus.UNAVAILABLE -> ExitCause.ROOT_UNAVAILABLE
-        WindowStatus.FOREIGN -> ExitCause.FOREIGN_WINDOW
+        WindowStatus.FOREIGN, WindowStatus.SYSTEM_PANEL -> ExitCause.FOREIGN_WINDOW
         WindowStatus.TARGET ->
             if (kind == VerdictKind.NOT_SHORTFORM) ExitCause.NO_SHORTFORM_SIGNAL else ExitCause.UNKNOWN_SCREEN
     }
