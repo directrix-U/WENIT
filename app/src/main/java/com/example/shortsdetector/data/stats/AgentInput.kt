@@ -24,7 +24,9 @@ data class AgentInput(
     val week: WeekStats,
     val recent: RecentUsageStats,
     /** 새것부터, 최대 [AgentInputBuilder.RECENT_CHANGES] 건 */
-    val recentPolicyChanges: List<PolicyChangeRecord>
+    val recentPolicyChanges: List<PolicyChangeRecord>,
+    /** 입력에 발표용 시드가 섞였다. 앱 안에서만 쓰고 외부로 보내지 않는다. */
+    val usedSeedData: Boolean = false
 )
 
 object AgentInputBuilder {
@@ -49,6 +51,7 @@ object AgentInputBuilder {
         today = UsageStatsCalculator.today(sessions, interventions, goals, zone, nowMs),
         week = UsageStatsCalculator.week(sessions, interventions, zone, nowMs),
         recent = UsageStatsCalculator.recent(sessions, interventions, zone, nowMs),
-        recentPolicyChanges = recentPolicyChanges.filterNot { it.isDemo }.take(RECENT_CHANGES)
+        recentPolicyChanges = recentPolicyChanges.filterNot { it.isDemo }.take(RECENT_CHANGES),
+        usedSeedData = sessions.any { it.isSeed } || interventions.any { it.isSeed }
     )
 }

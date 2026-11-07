@@ -203,7 +203,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `max_confidence_bucket`
 - `end_reason_code`
 - `is_demo`: boolean. 시연 모드 중 시작한 세션. 통계와 에이전트 입력에서 기본 제외. 시연 모드가 켜져 있는 동안 홈·기록 화면에는 포함해 보여 준다
-- `is_seed`: boolean. 발표용 시드 기록. 통계와 에이전트는 실제 기록처럼 읽는다(`InterventionEvent` 도 같음). 서비스의 하루 상한 복구와 남은 시간 계산에서는 뺀다. 시드가 있으면 설정 화면 맨 위에 "예시 데이터 사용 중" 을 표시하고 바로 지울 수 있다
+- `is_seed`: boolean. 발표용 시드 기록. 통계와 에이전트는 실제 기록처럼 읽는다(`InterventionEvent` 도 같음). 서비스의 하루 상한 복구와 남은 시간 계산에서는 뺀다. 시드가 있으면 설정 화면 맨 위에 "예시 데이터 사용 중" 을 표시하고 바로 지울 수 있다. 지우면 시드가 든 입력으로 나온 정책 변경 이력(`PolicyChange.is_seed`)과 에이전트 문구도 지우고 정책을 기본값으로 되돌린다. 실제 기록은 그대로 둔다
 
 ### `DetectionObservation`
 - `observation_id`: UUID

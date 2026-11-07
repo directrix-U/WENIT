@@ -114,6 +114,21 @@ object InterventionPolicyPreferences {
         return before
     }
 
+    /**
+     * 시드를 지울 때: 정책을 기본값으로, 연속 횟수를 처음으로 되돌린다. 실제 기록은 그대로이므로
+     * [resetForDemo] 와 달리 서비스의 하루 개입 수는 초기화하지 않는다.
+     * @return 초기화 전 정책
+     */
+    internal fun resetToDefault(p: SharedPreferences): InterventionPolicy {
+        val before = read(p)
+        write(p, InterventionPolicy())
+        p.edit {
+            remove(KEY_SKIP_STREAK)
+            remove(KEY_STOP_STREAK)
+        }
+        return before
+    }
+
     private fun migrate(context: Context) {
         migrateLegacyThreshold(prefs(context), DetectionPreferences.prefs(context))
     }

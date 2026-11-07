@@ -11,6 +11,7 @@ import android.view.accessibility.AccessibilityManager
 import com.example.shortsdetector.BuildConfig
 import com.example.shortsdetector.R
 import com.example.shortsdetector.ShortsDetectionService
+import com.example.shortsdetector.ai.agent.SeedDataReset
 import com.example.shortsdetector.ShortsNotifier
 import com.example.shortsdetector.ai.AiGoalRecommender
 import com.example.shortsdetector.ai.ClaudeMessagesClient
@@ -303,7 +304,9 @@ class AndroidAppRepository(context: Context) : AppRepository {
 
     /** 시드가 섞인 첫 주 평균이 남지 않게 아낀 시간 기준값도 다시 계산한다. */
     override fun deleteSeedData() {
-        db.deleteSeedRecords()
+        SeedDataReset(
+            db, InterventionPolicyPreferences.prefs(app), AgentPreferences.prefs(app), ::nowMs
+        ) { UUID.randomUUID().toString() }.run(app.getString(R.string.policy_reason_seed_deleted))
         SavedTimeBaselinePreferences.clear(app)
     }
 

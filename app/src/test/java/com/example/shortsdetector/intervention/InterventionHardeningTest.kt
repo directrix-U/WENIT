@@ -430,7 +430,7 @@ class InterventionHardeningTest {
 
     @Test
     fun `migration 2 to 3 only adds columns and marks known demo changes`() {
-        assertEquals(5, UsageSchema.VERSION)
+        assertEquals(6, UsageSchema.VERSION)
         val sql = UsageSchema.MIGRATE_2_TO_3.joinToString("\n").uppercase()
         assertFalse("DROP" in sql || "DELETE" in sql || "RENAME" in sql)
         assertEquals(1, UsageSchema.MIGRATE_2_TO_3.count { it.startsWith("UPDATE") })

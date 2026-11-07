@@ -116,5 +116,7 @@ data class PolicyChangeRecord(
     /** 에이전트 변경일 때만 */
     val modelId: String? = null,
     /** 시연 모드의 변경. AI 입력에서 뺀다. */
-    val isDemo: Boolean = false
+    val isDemo: Boolean = false,
+    /** 발표용 시드가 든 입력으로 나온 변경. 시드를 지울 때 함께 지운다. */
+    val isSeed: Boolean = false
 )

@@ -229,6 +229,7 @@
     <string name="dev_scenarios">시연 데이터</string>
     <string name="dev_seed_done">개입 %1$d건을 넣었어요</string>
     <string name="policy_reason_demo_reset">시연 시작값으로 되돌렸어요</string>
+    <string name="policy_reason_seed_deleted">예시 데이터를 지워 기본 정책으로 돌아갔어요</string>
     <string name="settings_analysis_failed">분석하지 못해서 지금 정책을 그대로 쓰고 있어요.</string>
     <string name="settings_analysis_no_data">개입 기록이 아직 적어서 분석하지 않았어요.</string>
     <string name="settings_deleted">기록을 지웠어요.</string>

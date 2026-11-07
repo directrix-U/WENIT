@@ -38,6 +38,9 @@ interface UsageStore {
     /** 발표용 시드 기록만 지운다. */
     fun deleteSeedRecords()
 
+    /** 시드가 든 입력으로 나온 정책 변경 기록만 지운다. */
+    fun deleteSeedPolicyChanges()
+
     /** 발표용 시드 기록이 하나라도 있으면 true */
     fun hasSeedRecords(): Boolean
 
@@ -113,6 +116,10 @@ class InMemoryUsageStore : UsageStore {
     @Synchronized override fun deleteSeedRecords() {
         sessions.values.removeAll { it.isSeed }
         interventions.values.removeAll { it.isSeed }
+    }
+
+    @Synchronized override fun deleteSeedPolicyChanges() {
+        policyChanges.values.removeAll { it.isSeed }
     }
 
     @Synchronized override fun hasSeedRecords() =

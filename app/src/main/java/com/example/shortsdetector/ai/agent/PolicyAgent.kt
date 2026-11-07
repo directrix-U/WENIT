@@ -96,7 +96,8 @@ class PolicyAgent(
                 reasonText = reason,
                 inputSummary = inputSummary(input),
                 status = PolicyChangeStatus.APPLIED,
-                modelId = ClaudeMessagesClient.MODEL
+                modelId = ClaudeMessagesClient.MODEL,
+                isSeed = input.usedSeedData
             )
         )
         return AgentRunResult(AgentRunStatus.CHANGED, current, next, nowMs() - started, reason = reason)
@@ -125,7 +126,8 @@ class PolicyAgent(
             newPolicy = previous,
             reasonText = reason,
             inputSummary = null,
-            status = PolicyChangeStatus.REVERTED_BY_USER
+            status = PolicyChangeStatus.REVERTED_BY_USER,
+            isSeed = latest.isSeed
         ).also(records::insertPolicyChange)
     }
 

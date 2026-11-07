@@ -72,6 +72,13 @@ object AgentPreferences {
 
     internal fun writeLastResult(p: SharedPreferences, summary: String) = p.edit { putString(KEY_LAST_RESULT, summary) }
 
+    /** 시드를 지울 때. 마지막 실행 시각은 남겨 앱을 열자마자 다시 호출되지 않게 한다. */
+    internal fun clearSeedResults(p: SharedPreferences) = p.edit {
+        remove(KEY_LV1)
+        remove(KEY_LV2)
+        remove(KEY_LAST_RESULT)
+    }
+
     internal fun clearRunState(p: SharedPreferences) = p.edit {
         remove(KEY_LV1)
         remove(KEY_LV2)

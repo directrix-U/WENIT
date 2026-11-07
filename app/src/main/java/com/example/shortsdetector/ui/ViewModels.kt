@@ -423,7 +423,7 @@ class SettingsViewModel(
     }
 
     fun deleteSeedData() {
-        tasks.run(work = { repo.deleteSeedData() }) { set { it.copy(hasSeedData = false) } }
+        tasks.run(work = { repo.deleteSeedData() }) { refresh() }
     }
 
     fun removeGoal(type: GoalType) {

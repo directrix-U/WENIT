@@ -24,6 +24,7 @@ class UsageDatabase private constructor(context: Context) :
         UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
         UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
         UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
+        UsageSchema.MIGRATE_5_TO_6.forEach(db::execSQL)
     }
 
     /** SQLiteOpenHelper 가 트랜잭션으로 감싸 호출한다. 기존 기록은 지우지 않는다. */
@@ -32,6 +33,7 @@ class UsageDatabase private constructor(context: Context) :
         if (oldVersion < 3) UsageSchema.MIGRATE_2_TO_3.forEach(db::execSQL)
         if (oldVersion < 4) UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
         if (oldVersion < 5) UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
+        if (oldVersion < 6) UsageSchema.MIGRATE_5_TO_6.forEach(db::execSQL)
     }
 
     override fun upsertSession(record: SessionRecord) {
@@ -103,6 +105,7 @@ class UsageDatabase private constructor(context: Context) :
             put("status", record.status.name)
             put("model_id", record.modelId)
             put("is_demo", if (record.isDemo) 1 else 0)
+            put("is_seed", if (record.isSeed) 1 else 0)
         }
         writableDatabase.insertWithOnConflict("policy_changes", null, v, SQLiteDatabase.CONFLICT_IGNORE)
     }
@@ -119,6 +122,10 @@ class UsageDatabase private constructor(context: Context) :
             "outcome IS NULL AND level IS NOT NULL AND method IN (?, ?)",
             arrayOf(InterventionMethod.POPUP.name, InterventionMethod.NOTIFICATION.name)
         )
+    }
+
+    override fun deleteSeedPolicyChanges() {
+        writableDatabase.delete("policy_changes", "is_seed = 1", null)
     }
 
     override fun hasSeedRecords(): Boolean = readableDatabase.rawQuery(
@@ -247,7 +254,8 @@ class UsageDatabase private constructor(context: Context) :
             inputSummary = str("input_summary"),
             status = enumOr(str("status"), PolicyChangeStatus.REJECTED_OUT_OF_RANGE),
             modelId = str("model_id"),
-            isDemo = long("is_demo") != 0L
+            isDemo = long("is_demo") != 0L,
+            isSeed = long("is_seed") != 0L
         )
     }
 

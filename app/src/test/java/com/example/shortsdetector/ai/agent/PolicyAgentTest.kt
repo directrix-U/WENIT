@@ -338,6 +338,30 @@ class PolicyAgentTest {
         assertFalse(AgentSchedule.isDue(now, null, enabled = false, consent = true))
     }
 
+    @Test
+    fun `a change made from seed input is marked, one from real input is not`() {
+        respond(decision())
+        agent().run(input().copy(usedSeedData = true))
+        assertTrue(store.recentPolicyChanges(1).single().isSeed)
+
+        store.deleteAll()
+        respond(decision())
+        agent().run(input())
+        assertFalse(store.recentPolicyChanges(1).single().isSeed)
+    }
+
+    @Test
+    fun `reverting a seed based change stays seed based`() {
+        respond(decision())
+        agent().run(input().copy(usedSeedData = true))
+
+        val undo = agent().revertLatest("되돌렸어요")
+
+        assertTrue(undo!!.isSeed)
+        store.deleteSeedPolicyChanges()
+        assertTrue(store.recentPolicyChanges(10).isEmpty())
+    }
+
     // --- 되돌리기 ---
 
     @Test
@@ -546,7 +570,8 @@ class PolicyAgentTest {
 
     @Test
     fun `migration 4 to 5 only adds columns`() {
-        assertEquals(5, UsageSchema.VERSION)
+        assertEquals(6, UsageSchema.VERSION)
+        assertTrue(UsageSchema.MIGRATE_5_TO_6.single().let { it.startsWith("ALTER TABLE policy_changes") && "ADD COLUMN is_seed" in it })
         assertTrue(UsageSchema.MIGRATE_4_TO_5.all { it.startsWith("ALTER TABLE") && "ADD COLUMN is_seed" in it })
     }
 

@@ -62,6 +62,7 @@ class ViewModelsTest {
 
     private inner class FakeRepo : AppRepository {
         var seedData = false
+        var lastResult: String? = null
         var savedProfile: UserProfile? = null
         var onboardingDone = false
         var consent = false
@@ -114,7 +115,7 @@ class ViewModelsTest {
         override fun isAgentEnabled() = agentOn
         override fun setAgentEnabled(enabled: Boolean) { agentOn = enabled }
         override fun agentMessages(): AgentMessages? = null
-        override fun lastAgentResult(): String? = null
+        override fun lastAgentResult(): String? = lastResult
         override fun isAgentDue() = agentDue
         override fun runAgent(): AgentRunResult {
             agentRuns++
@@ -151,7 +152,10 @@ class ViewModelsTest {
         override fun resetForDemo() { resets++ }
         override fun insertSeed(scenario: DemoSeedData.Scenario) = 7
         override fun hasSeedData() = seedData
-        override fun deleteSeedData() { seedData = false }
+        override fun deleteSeedData() {
+            seedData = false
+            lastResult = null
+        }
         override fun runGoalEval() = 15
         override fun recordNotificationTap(interventionId: String) = Unit
     }
@@ -708,6 +712,19 @@ class ViewModelsTest {
 
         assertFalse(vm.state.value.hasSeedData)
         assertFalse(repo.seedData)
+    }
+
+    @Test
+    fun `deleting seed data clears the shown analysis result at once`() {
+        repo.seedData = true
+        repo.lastResult = "CHANGED"
+        val vm = SettingsViewModel(repo, Direct, debugBuild = true)
+        vm.refresh()
+        assertEquals("CHANGED", vm.state.value.lastResult)
+
+        vm.deleteSeedData()
+
+        assertNull(vm.state.value.lastResult)
     }
 
     @Test
