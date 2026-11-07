@@ -202,8 +202,8 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `obscured_ms`: 일시 가림으로 별도 처리한 시간. Lv.3 카운트다운 시간도 시청시간에서 빼고 여기에 넣는다
 - `max_confidence_bucket`
 - `end_reason_code`
-- `is_demo`: boolean. 시연 모드 중 시작한 세션. 통계와 에이전트 입력에서 기본 제외
-- `is_seed`: boolean. 발표용 시드 기록. 통계와 에이전트는 실제 기록처럼 읽는다(`InterventionEvent` 도 같음)
+- `is_demo`: boolean. 시연 모드 중 시작한 세션. 통계와 에이전트 입력에서 기본 제외. 시연 모드가 켜져 있는 동안 홈·기록 화면에는 포함해 보여 준다
+- `is_seed`: boolean. 발표용 시드 기록. 통계와 에이전트는 실제 기록처럼 읽는다(`InterventionEvent` 도 같음). 서비스의 하루 상한 복구와 남은 시간 계산에서는 뺀다
 
 ### `DetectionObservation`
 - `observation_id`: UUID
@@ -252,7 +252,7 @@ YouTube는 2026년 6월 Shorts 플레이어의 `Clear Screen` 모드, 재생 속
 - `level`: 현재 단계
 - `max_level`: 2 또는 3, 기본 3. 2 면 Lv.3 을 쓰지 않는다
 - `escalate_after_skips`, `deescalate_after_stops`, `cooldown_ms`, `max_daily_interventions`
-- 시연 모드(기준 10초, 쿨다운 10초, 상승 기준 1회) 값은 저장값 위에 덧씌워 계산만 하고 저장하지 않는다. 하루 상한도 시연 전용 카운터를 쓰고 시연 모드를 켤 때 초기화한다 기준은 개발자 화면에서 10·20·30초 중 고른다(무대 권장 20~30초).
+- 시연 모드(기준 10초, 쿨다운 10초, 상승 기준 1회) 값은 저장값 위에 덧씌워 계산만 하고 저장하지 않는다. 하루 상한도 시연 전용 카운터를 쓰고 시연 모드를 켤 때 초기화한다 기준은 개발자 화면에서 10·20·30초 중 고른다(무대 권장 20~30초). 시연 단계는 세션 안에서만 오르고 새 세션이 시작되면 처음으로 돌아간다. 이어진 세션은 유지한다.
 
 ### `UserProfile`
 - 나이대, 성별(기본 응답 안 함), 주로 보는 숏폼·시간대·요일, 평소 하루 시청 시간, AI 추천 사용 동의(기본 false)

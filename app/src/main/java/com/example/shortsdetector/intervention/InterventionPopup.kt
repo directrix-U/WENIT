@@ -26,7 +26,8 @@ import com.example.shortsdetector.ui.WenitActivity
  *    터치를 막으며, 끝나면 버튼을 보여 주고, 답이 없으면 스스로 닫는다.
  *    홈·뒤로 같은 시스템 탐색은 막지 않으며, 이탈 신호가 잡히면 서비스가 바로 닫는다. 사용자가 끌 수 없는 상태는 없다.
  *  - 포커스를 가져가지 않는다(FLAG_NOT_FOCUSABLE). 키보드·뒤로가기 등은 아래 앱이 계속 받는다.
- *  - 멈춤을 고르면 앱 화면으로 이동한다(사용자 탭이 있을 때만 Activity 를 연다).
+ *  - 멈춤을 고르면 영상을 멈춘 뒤 앱 화면으로 이동한다(사용자 탭이 있을 때만 Activity 를 연다).
+ *    재생 중에 앱을 벗어나면 YouTube 가 작은 창(PiP)으로 넘어간다.
  *
  * 메인 스레드에서만 호출한다. 예외는 여기서 격리하고 실패하면 false 를 돌려준다(호출 측이 알림으로 대체).
  * TODO: VERIFY ON DEVICE — 제조사 ROM 에서 전체 화면 오버레이 표시와 시스템 탐색 제스처.
@@ -47,6 +48,9 @@ class InterventionPopup(private val service: AccessibilityService) {
 
         /** Lv.3 이 답 없이 스스로 닫혔을 때. */
         fun onTimedOut()
+
+        /** 앱으로 이동하기 직전. 준비가 끝나면 [proceed] 를 부른다. */
+        fun beforeLeaving(proceed: () -> Unit)
     }
 
     private val handler = Handler(Looper.getMainLooper())
@@ -100,7 +104,7 @@ class InterventionPopup(private val service: AccessibilityService) {
             } catch (e: RuntimeException) {
                 Log.w(ShortsDetectionService.TAG, "개입 반응 기록 실패: ${e.javaClass.simpleName}")
             }
-            if (outcome == InterventionOutcome.STOPPED) openApp(watchMs) else dismiss()
+            if (outcome == InterventionOutcome.STOPPED) listener.beforeLeaving { openApp(watchMs) } else dismiss()
         }
         v.findViewById<View>(R.id.popupContinue).setOnClickListener { answer(InterventionOutcome.CONTINUED) }
         v.findViewById<View>(R.id.popupStop).setOnClickListener { answer(InterventionOutcome.STOPPED) }

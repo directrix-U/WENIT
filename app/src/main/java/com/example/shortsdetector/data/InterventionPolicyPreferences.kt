@@ -56,6 +56,23 @@ object InterventionPolicyPreferences {
 
     fun setDemoMode(context: Context, enabled: Boolean) = writeDemoMode(prefs(context), enabled)
 
+    /** 새 세션이 시작될 때 부른다. 이어진 세션에는 부르지 않는다. */
+    fun startDemoSession(context: Context) = resetDemoLevel(prefs(context))
+
+    /**
+     * 시연 단계는 세션 안에서만 오른다. 그대로 남겨 두면 다음 세션, 다음 날의 첫 개입이 Lv.3 으로 시작한다.
+     * 실제 모드에서는 아무것도 바꾸지 않는다. 실제 단계는 정책에 저장되는 시작 단계다.
+     */
+    internal fun resetDemoLevel(p: SharedPreferences) {
+        if (!p.getBoolean(KEY_DEMO_MODE, false)) return
+        if (!p.contains(KEY_DEMO_LEVEL) && !p.contains(KEY_DEMO_SKIP_STREAK) && !p.contains(KEY_DEMO_STOP_STREAK)) return
+        p.edit {
+            remove(KEY_DEMO_LEVEL)
+            remove(KEY_DEMO_SKIP_STREAK)
+            remove(KEY_DEMO_STOP_STREAK)
+        }
+    }
+
     fun demoThresholdMs(context: Context): Long = readDemoThresholdMs(prefs(context))
 
     fun setDemoThresholdMs(context: Context, ms: Long) = writeDemoThresholdMs(prefs(context), ms)

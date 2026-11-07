@@ -81,6 +81,10 @@ class InterventionCoordinator(
         return InterventionResult(p.sessionNumber, p.level, p.level, InterventionOutcome.INTERRUPTED, null)
     }
 
+    /** 특정 개입에 대한 반응(알림 탭). 이미 끝났거나 다른 개입이면 아무 일도 없다. */
+    fun respondTo(interventionId: String, outcome: InterventionOutcome): InterventionResult? =
+        if (pending?.id == interventionId) respond(outcome) else null
+
     /** @return 끝낼 개입이 없으면 null */
     fun respond(outcome: InterventionOutcome): InterventionResult? {
         val p = pending ?: return null

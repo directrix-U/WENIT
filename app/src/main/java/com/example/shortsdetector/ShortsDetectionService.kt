@@ -22,7 +22,6 @@ import com.example.shortsdetector.data.usage.InterventionMethod
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionUserReason
 import com.example.shortsdetector.data.usage.SessionRecorder
-import com.example.shortsdetector.data.usage.SessionStatus
 import com.example.shortsdetector.data.usage.SystemUsageClock
 import com.example.shortsdetector.data.usage.UsageDatabase
 import com.example.shortsdetector.detection.DetectionEngine
@@ -34,10 +33,14 @@ import com.example.shortsdetector.detection.features.AccessibilitySnapshotter
 import com.example.shortsdetector.detection.state.DetectionTuning
 import com.example.shortsdetector.ai.agent.AgentPreferences
 import com.example.shortsdetector.intervention.AgentCopyProvider
+import com.example.shortsdetector.intervention.AudioPlaybackControls
 import com.example.shortsdetector.intervention.GoalRemaining
 import com.example.shortsdetector.intervention.InterventionCoordinator
 import com.example.shortsdetector.intervention.InterventionCopyInput
 import com.example.shortsdetector.intervention.InterventionPopup
+import com.example.shortsdetector.intervention.LiveRecordFilter
+import com.example.shortsdetector.intervention.NotificationTaps
+import com.example.shortsdetector.intervention.PlaybackPauser
 import com.example.shortsdetector.intervention.PreferencesPolicyStore
 import com.example.shortsdetector.intervention.ResourceInterventionCopyProvider
 import com.example.shortsdetector.platform.DetectionStatus
@@ -83,6 +86,9 @@ class ShortsDetectionService : AccessibilityService() {
     )
     private val snapshotter = AccessibilitySnapshotter(DetectionConfig.MAX_NODES_VISITED)
     private val popup = InterventionPopup(this)
+    private val pauser by lazy {
+        PlaybackPauser(AudioPlaybackControls(this)) { delayMs, action -> pauseHandler.postDelayed(action, delayMs) }
+    }
 
     /** 사용 기록(세션·개입). onServiceConnected 에서 만든다. 저장 실패는 감지에 영향을 주지 않는다. */
     private var usageStore: BackgroundUsageStore? = null
@@ -97,6 +103,9 @@ class ShortsDetectionService : AccessibilityService() {
     private var todayWatchBeforeSessionMs = 0L
 
     private val handler = Handler(Looper.getMainLooper())
+
+    /** 팝업이 닫혀도 일시정지 절차가 끊기지 않게 따로 둔다. */
+    private val pauseHandler = Handler(Looper.getMainLooper())
     private var watchdogScheduled = false
 
     private val watchdog = Runnable {
@@ -136,6 +145,7 @@ class ShortsDetectionService : AccessibilityService() {
         applyEnabledPackages()
         applyPolicy()
         DetectionStatus.onConnected()
+        NotificationTaps.listener = ::onNotificationTapped
 
         Log.i(
             TAG,
@@ -172,11 +182,9 @@ class ShortsDetectionService : AccessibilityService() {
         val (from, to) = todayRange()
         val demoFrom = InterventionPolicyPreferences.resolve(this).demoRunId ?: Long.MAX_VALUE
         store.read { s ->
-            val shown = s.interventionsBetween(from, to).filter {
-                it.method == InterventionMethod.POPUP || it.method == InterventionMethod.NOTIFICATION
-            }
-            val real = shown.count { !it.isDemo }
-            val demo = shown.count { it.isDemo && it.occurredAtMs >= demoFrom }
+            val today = s.interventionsBetween(from, to)
+            val real = LiveRecordFilter.realCount(today)
+            val demo = LiveRecordFilter.demoCount(today, demoFrom)
             handler.post { engine.seedDailyInterventions(real, demo) }
         }
     }
@@ -187,7 +195,7 @@ class ShortsDetectionService : AccessibilityService() {
         usageStore?.read { s ->
             val zone = ZoneId.systemDefault()
             val today = DailyUsageCalculator.dateOf(from, zone)
-            val earlier = s.sessionsOverlapping(from, to).filter { it.status != SessionStatus.OPEN && !it.isDemo }
+            val earlier = LiveRecordFilter.finishedRealSessions(s.sessionsOverlapping(from, to))
             val watch = DailyUsageCalculator.aggregate(earlier, zone, today, today).single().estimatedWatchMs
             handler.post { if (engine.sessionProgress()?.sessionNumber == startedSession) todayWatchBeforeSessionMs = watch }
         }
@@ -303,6 +311,7 @@ class ShortsDetectionService : AccessibilityService() {
         endSession("onUnbind")
         stopWatchdog()
         closeIntervention()
+        releasePlaybackControl()
         unregisterPreferenceListeners()
         DetectionStatus.onDisconnected()
         stopUsageRecording()
@@ -312,10 +321,17 @@ class ShortsDetectionService : AccessibilityService() {
     override fun onDestroy() {
         stopWatchdog()
         closeIntervention()
+        releasePlaybackControl()
         stopUsageRecording()
         unregisterPreferenceListeners()
         DetectionStatus.onDisconnected()
         super.onDestroy()
+    }
+
+    private fun releasePlaybackControl() {
+        NotificationTaps.listener = null
+        pauseHandler.removeCallbacksAndMessages(null)
+        pauser.release()
     }
 
     private fun unregisterPreferenceListeners() {
@@ -327,16 +343,46 @@ class ShortsDetectionService : AccessibilityService() {
     /** 팝업을 닫는다. 답을 받지 못한 개입은 IGNORED 로 끝낸다. */
     private fun closeIntervention() {
         popup.dismiss()
-        engine.setWatchHold(false)
+        engine.setWatchHold(pauser.pausedByApp)
         coordinator?.let { c -> guarded { c.abandon() } }
     }
 
     /** 이탈 신호로 오버레이를 닫는다. 사용자의 반응이 아니므로 INTERRUPTED 로 남기고, 세션이 이어지면 다시 개입한다. */
     private fun interruptIntervention() {
         popup.dismiss()
-        engine.setWatchHold(false)
+        engine.setWatchHold(pauser.pausedByApp)
         coordinator?.let { c ->
             guarded { c.interrupt()?.let { engine.retryIntervention(it.sessionNumber) } }
+        }
+    }
+
+    /** 알림을 눌러 앱을 열었다. 멈춘 것으로 끝내고, PiP 로 이어지는 소리도 멈춘다. */
+    private fun onNotificationTapped(interventionId: String): Boolean {
+        val c = coordinator ?: return false
+        var handled = false
+        guarded {
+            val result = c.respondTo(interventionId, InterventionOutcome.STOPPED) ?: return@guarded
+            handled = true
+            Log.i(TAG, "개입 반응(알림 탭): Lv.${result.level} ${result.outcome} → Lv.${result.nextLevel}")
+            pausePlayback()
+        }
+        return handled
+    }
+
+    /** 영상을 멈춘다. 멈춘 동안의 시간은 시청시간에 넣지 않는다. */
+    private fun pausePlayback(done: () -> Unit = {}) {
+        pauser.pause { result ->
+            Log.i(TAG, "재생 일시정지: $result")
+            if (pauser.pausedByApp) engine.setWatchHold(true)
+            done()
+        }
+    }
+
+    /** 사용자가 다시 재생하면 시청시간을 다시 센다. */
+    private fun syncPausedPlayback() {
+        if (pauser.checkResumed()) {
+            engine.setWatchHold(false)
+            Log.i(TAG, "재생 다시 시작됨")
         }
     }
 
@@ -375,6 +421,7 @@ class ShortsDetectionService : AccessibilityService() {
     /** @param source 판정을 실행한 쪽. 로그에만 쓴다(타이머가 제 역할을 하는지 확인용). */
     private fun analyzeCurrentScreen(source: String) {
         if (screenWidth <= 0 || screenHeight <= 0) cacheScreenSize()
+        syncPausedPlayback()
         val now = SystemClock.elapsedRealtime()
 
         val output = try {
@@ -403,7 +450,12 @@ class ShortsDetectionService : AccessibilityService() {
             )
             val output = engine.onSnapshot(now, snapshot)
             val elapsed = SystemClock.elapsedRealtime() - started
-            Log.d(TAG, "측정 nodes=${snapshot.nodes.size}${if (snapshot.truncated) "(잘림)" else ""} / ${elapsed}ms")
+            val rootRatio = snapshot.root?.let(snapshot::areaRatio) ?: 0f
+            Log.d(
+                TAG,
+                "측정 nodes=${snapshot.nodes.size}${if (snapshot.truncated) "(잘림)" else ""} / ${elapsed}ms " +
+                    String.format(Locale.US, "창면적비=%.3f", rootRatio)
+            )
             return output
         } finally {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
@@ -452,6 +504,8 @@ class ShortsDetectionService : AccessibilityService() {
         step.startedSession?.let { n ->
             todayWatchBeforeSessionMs = 0L
             refreshTodayWatch(n)
+            InterventionPolicyPreferences.startDemoSession(this)
+            if (pauser.pausedByApp) engine.setWatchHold(true)
             Log.i(
                 TAG,
                 "[$source] ★ 숏폼 감지 #$n pkg=${output.observation.packageName} 신뢰도=${step.startedConfidence} " +
@@ -459,6 +513,7 @@ class ShortsDetectionService : AccessibilityService() {
             )
         }
         step.resumedSession?.let { n ->
+            if (pauser.pausedByApp) engine.setWatchHold(true)
             Log.i(TAG, "[$source] ★ 세션 #$n 이어짐 pkg=${output.observation.packageName} (누적 시청시간 유지)")
         }
         if (output.suppressedByCooldown) {
@@ -536,9 +591,14 @@ class ShortsDetectionService : AccessibilityService() {
             }
         }
 
-        override fun onBreathingStarted() = engine.setWatchHold(true)
+        override fun onBreathingStarted() {
+            engine.setWatchHold(true)
+            pausePlayback()
+        }
 
-        override fun onBreathingFinished() = engine.setWatchHold(false)
+        override fun onBreathingFinished() = engine.setWatchHold(pauser.pausedByApp)
+
+        override fun beforeLeaving(proceed: () -> Unit) = pausePlayback(proceed)
 
         override fun onTimedOut() = closeIntervention()
     }

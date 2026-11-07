@@ -285,8 +285,9 @@ class HomeViewModel(private val repo: AppRepository, private val tasks: TaskRunn
         val sessions = repo.sessions(window.fromMs, window.toMs)
         val interventions = repo.interventions(window.fromMs, window.toMs)
         val goals = repo.goals()
-        val today = UsageStatsCalculator.today(sessions, interventions, goals, zone, now)
         val resolved = repo.resolvedPolicy()
+        // 시연 모드에서는 지금 보는 기록이 시연 기록이다. 빼면 쇼츠를 봐도 0초로 보인다. 저장·통계·에이전트 입력은 그대로 뺀다.
+        val today = UsageStatsCalculator.today(sessions, interventions, goals, zone, now, includeDemo = resolved.demoMode)
         val hasRecords = sessions.any { !it.isDemo }
         val hadEarlier = sessions.any { !it.isDemo && it.startedAtMs < startOfToday(now) }
         val yesterday = if (goals.isEmpty() || !hadEarlier) {
@@ -357,16 +358,17 @@ class RecordsViewModel(private val repo: AppRepository, private val tasks: TaskR
         val window = UsageStatsCalculator.dataWindow(now, zone)
         val sessions = repo.sessions(window.fromMs, window.toMs)
         val interventions = repo.interventions(window.fromMs, window.toMs)
+        val demo = repo.isDemoMode()
         val changes = repo.policyChanges(CHANGE_LIMIT).filterNot { it.isDemo }
         val latestAgent = changes.firstOrNull { it.source == PolicyChangeSource.AGENT }
         return RecordsState(
             loading = false,
-            week = UsageStatsCalculator.week(sessions, interventions, zone, now),
+            week = UsageStatsCalculator.week(sessions, interventions, zone, now, includeDemo = demo),
             changes = changes.map {
                 PolicyChangeRow(it, it === latestAgent && it.status == PolicyChangeStatus.APPLIED && it.previousPolicy != null)
             },
             interventions = interventions
-                .filter { !it.isDemo && (it.method == InterventionMethod.POPUP || it.method == InterventionMethod.NOTIFICATION) }
+                .filter { (demo || !it.isDemo) && (it.method == InterventionMethod.POPUP || it.method == InterventionMethod.NOTIFICATION) }
                 .sortedByDescending { it.occurredAtMs }
                 .take(INTERVENTION_LIMIT)
         )

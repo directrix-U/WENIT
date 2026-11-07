@@ -124,6 +124,13 @@ object DetectionConfig {
      */
     const val OVERLAY_MAX_ROOT_AREA_RATIO = 0.50f
 
+    /**
+     * 플레이어가 보이는 활성 창이 화면의 이 비율보다 작으면 작은 창(PiP)으로 본다.
+     * 실측: SM-S906N 기본 PiP 336×597(0.079). 50:50 분할 화면(약 0.5)은 PiP 가 아니다.
+     * 사용자가 키운 PiP 의 최대 크기는 재지 못했다. TODO: VERIFY ON DEVICE
+     */
+    const val PIP_MAX_ROOT_AREA_RATIO = 0.35f
+
     /** reel_* 보조 컨테이너를 "전체화면"으로 볼 면적비. 덤프 실측 0.863. TODO: VERIFY ON DEVICE */
     const val MIN_CONTAINER_AREA_RATIO = 0.70f
 

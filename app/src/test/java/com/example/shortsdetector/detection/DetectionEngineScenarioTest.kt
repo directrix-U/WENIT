@@ -5,6 +5,7 @@ import com.example.shortsdetector.detection.adapters.RecentActivity
 import com.example.shortsdetector.detection.adapters.ShortformAdapter
 import com.example.shortsdetector.detection.adapters.instagram.InstagramReelsAdapter
 import com.example.shortsdetector.detection.adapters.youtube.YouTubeShortsAdapter
+import com.example.shortsdetector.detection.adapters.youtube.YouTubeViewIds
 import com.example.shortsdetector.detection.model.AdapterVerdict
 import com.example.shortsdetector.detection.model.DetectionState
 import com.example.shortsdetector.detection.model.ReasonCode
@@ -116,6 +117,54 @@ class DetectionEngineScenarioTest {
         val e = engine()
         repeat(10) { assertNull(e.frame(it * 1_000L, Fixtures.youtubeDialogWindow()).notifySession) }
         assertEquals(DetectionState.TARGET_FOREGROUND, e.state)
+    }
+
+    /** 활성 창 전체를 플레이어가 채운 PiP. 실측 기본 크기는 336×597(0.079) 이고 이 테스트는 사용자가 키운 경우다. */
+    private fun pipWindow(right: Int, bottom: Int) = ScreenSnapshot(
+        YT, Fixtures.W, Fixtures.H,
+        listOf(
+            Fixtures.node(null, right = right, bottom = bottom),
+            Fixtures.node(YouTubeViewIds.SHORTS_PLAYER, right = right, bottom = bottom)
+        )
+    )
+
+    @Test
+    fun `enlarged pip window is not counted as watch time`() {
+        val e = engine(thresholdMs = 600_000L)
+        e.enterShorts(0)
+        e.frame(1_500, Fixtures.youtubeShorts())
+        val before = e.sessionProgress()!!.estimatedWatchMs
+
+        val pip = pipWindow(700, 1_245)     // 면적비 0.33
+        val first = e.frame(2_500, pip)
+        assertEquals(VerdictKind.NOT_SHORTFORM, first.observation.verdict?.kind)
+        assertEquals(ReasonCode.MINIATURE_WINDOW, first.observation.verdict?.reason)
+
+        var ended: Long? = null
+        for (t in 3_500L..6_500L step 1_000L) {
+            e.frame(t, pip).endedSession?.let { ended = it.estimatedWatchMs }
+        }
+        assertEquals(before + 1_000L, ended)   // 작은 창이 나타난 관찰까지만 앞선 상태로 센다
+    }
+
+    @Test
+    fun `split screen sized window keeps the partial player verdict`() {
+        val e = engine()
+        val half = ScreenSnapshot(
+            YT, Fixtures.W, Fixtures.H,
+            listOf(
+                Fixtures.node(null, bottom = Fixtures.H / 2),
+                Fixtures.node(YouTubeViewIds.SHORTS_PLAYER, bottom = Fixtures.H / 2 - 100)
+            )
+        )
+        assertEquals(VerdictKind.SHORTFORM_PARTIAL, e.frame(0, half).observation.verdict?.kind)
+    }
+
+    @Test
+    fun `dialog window rule still wins over the pip rule when no player is visible`() {
+        val e = engine()
+        val dialog = ScreenSnapshot(YT, Fixtures.W, Fixtures.H, listOf(Fixtures.node(null, right = 700, bottom = 500)))
+        assertEquals(ReasonCode.OVERLAY_WINDOW, e.frame(0, dialog).observation.verdict?.reason)
     }
 
     @Test

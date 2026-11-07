@@ -469,6 +469,48 @@ class ViewModelsTest {
         PolicyChangeRecord(id, now, source, InterventionPolicy(), InterventionPolicy(thresholdMs = 60_000), "이유", null, status)
 
     @Test
+    fun `demo mode home shows what was just watched`() {
+        repo.demoOn = true
+        repo.sessionList += session(at(today, 9), 395_000L, demo = true)
+        val vm = HomeViewModel(repo, Direct)
+        vm.refresh()
+        assertEquals(395_000L, vm.state.value.watchMs)
+    }
+
+    @Test
+    fun `demo sessions stay out of home once demo mode is off`() {
+        repo.sessionList += session(at(today, 9), 395_000L, demo = true)
+        val vm = HomeViewModel(repo, Direct)
+        vm.refresh()
+        assertEquals(0L, vm.state.value.watchMs)
+    }
+
+    @Test
+    fun `demo mode records screen shows demo watch time and interventions`() {
+        repo.demoOn = true
+        repo.sessionList += session(at(today, 9), 395_000L, demo = true)
+        repo.interventionList += InterventionRecord(
+            "i", null, at(today, 9), InterventionMethod.POPUP, 1, 1, level = 1, isDemo = true
+        )
+        val vm = RecordsViewModel(repo, Direct)
+        vm.refresh()
+        assertEquals(395_000L, vm.state.value.week?.totalWatchMs)
+        assertEquals(1, vm.state.value.interventions.size)
+    }
+
+    @Test
+    fun `demo records stay out of the records screen once demo mode is off`() {
+        repo.sessionList += session(at(today, 9), 395_000L, demo = true)
+        repo.interventionList += InterventionRecord(
+            "i", null, at(today, 9), InterventionMethod.POPUP, 1, 1, level = 1, isDemo = true
+        )
+        val vm = RecordsViewModel(repo, Direct)
+        vm.refresh()
+        assertEquals(0L, vm.state.value.week?.totalWatchMs)
+        assertTrue(vm.state.value.interventions.isEmpty())
+    }
+
+    @Test
     fun `records are empty on the first day`() {
         val vm = RecordsViewModel(repo, Direct)
         vm.refresh()

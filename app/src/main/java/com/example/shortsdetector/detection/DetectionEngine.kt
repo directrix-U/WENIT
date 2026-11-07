@@ -204,7 +204,9 @@ class DetectionEngine(
         // (PiP 처럼 작은 창 안에 플레이어가 있으면 어댑터가 먼저 판단한다)
         val verdict = if (adapterVerdict.reason == ReasonCode.NO_SHORTFORM_SIGNAL) {
             overlayVerdict(snapshot) ?: adapterVerdict
-        } else adapterVerdict
+        } else {
+            miniatureWindowVerdict(snapshot, adapterVerdict) ?: adapterVerdict
+        }
         return Observation(atMs, WindowStatus.TARGET, adapter.packageName, verdict, adapter.ruleVersion)
     }
 
@@ -218,6 +220,18 @@ class DetectionEngine(
         return if (snapshot.areaRatio(root) < tuning.overlayMaxRootAreaRatio) {
             AdapterVerdict(VerdictKind.OVERLAY, Confidence.LOW, ReasonCode.OVERLAY_WINDOW)
         } else null
+    }
+
+    /**
+     * 활성 창 자체가 작은데 플레이어가 보이면 작은 창(PiP)이다(앱 무관 공통 규칙). 시청시간에 넣지 않는다.
+     * 면적비만 보는 어댑터는 사용자가 PiP 를 키우면 PLAYER_PARTIAL 로 판단할 수 있어 여기서 막는다.
+     */
+    private fun miniatureWindowVerdict(snapshot: ScreenSnapshot, verdict: AdapterVerdict): AdapterVerdict? {
+        if (verdict.kind != VerdictKind.SHORTFORM && verdict.kind != VerdictKind.SHORTFORM_PARTIAL) return null
+        val root = snapshot.root ?: return null
+        if (snapshot.screenArea <= 0L || root.area <= 0L) return null
+        if (snapshot.areaRatio(root) >= tuning.pipMaxRootAreaRatio) return null
+        return verdict.copy(kind = VerdictKind.NOT_SHORTFORM, confidence = Confidence.LOW, reason = ReasonCode.MINIATURE_WINDOW)
     }
 
     private fun onObservation(obs: Observation): EngineOutput {

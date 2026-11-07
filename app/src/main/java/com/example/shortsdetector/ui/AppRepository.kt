@@ -37,6 +37,7 @@ import com.example.shortsdetector.data.stats.SavedTimeCalculator
 import com.example.shortsdetector.data.stats.UsageStatsCalculator
 import com.example.shortsdetector.data.usage.DemoSeedData
 import com.example.shortsdetector.data.usage.InterventionAction
+import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionRecord
 import com.example.shortsdetector.data.usage.PolicyChangeRecord
 import com.example.shortsdetector.data.usage.SessionRecord
@@ -308,8 +309,10 @@ class AndroidAppRepository(context: Context) : AppRepository {
         return rows.size
     }
 
-    override fun recordNotificationTap(interventionId: String) =
+    override fun recordNotificationTap(interventionId: String) {
+        db.setInterventionOutcome(interventionId, InterventionOutcome.STOPPED, null)
         db.setInterventionAction(interventionId, InterventionAction.OPEN_APP, nowMs())
+    }
 
     private companion object {
         const val RECENT_CHANGES = 10

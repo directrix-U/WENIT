@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import com.example.shortsdetector.BuildConfig
 import com.example.shortsdetector.R
 import com.example.shortsdetector.ShortsNotifier
+import com.example.shortsdetector.intervention.NotificationTaps
 import com.example.shortsdetector.ui.theme.WenitTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -67,13 +68,13 @@ class WenitActivity : ComponentActivity() {
         handleIntervention(intent)
     }
 
-    /** 팝업의 "멈출게" 와 알림 탭이 여기로 온다. 알림 탭은 그 개입에 "앱 열기" 반응을 기록한다. */
+    /** 팝업의 "멈출게" 와 알림 탭이 여기로 온다. 알림을 눌러 앱을 연 것은 반응이므로 멈춤으로 끝낸다. 서비스가 없을 때만 직접 기록한다. */
     private fun handleIntervention(intent: Intent?) {
         if (intent?.getBooleanExtra(EXTRA_FROM_INTERVENTION, false) != true) return
         intent.removeExtra(EXTRA_FROM_INTERVENTION) // 화면 회전 등으로 다시 처리하지 않게
         intent.getStringExtra(EXTRA_INTERVENTION_ID)?.let { id ->
             intent.removeExtra(EXTRA_INTERVENTION_ID)
-            tasks.run(work = { repo.recordNotificationTap(id) }) {}
+            if (!NotificationTaps.deliver(id)) tasks.run(work = { repo.recordNotificationTap(id) }) {}
         }
         if (intent.hasExtra(EXTRA_STOPPED_WATCH_MS)) {
             stopped.value = intent.getLongExtra(EXTRA_STOPPED_WATCH_MS, 0L)

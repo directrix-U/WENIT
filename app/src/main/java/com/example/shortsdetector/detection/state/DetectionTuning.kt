@@ -20,6 +20,8 @@ data class DetectionTuning(
     val minHoldAreaRatio: Float = DetectionConfig.MIN_HOLD_AREA_RATIO,
     /** 활성 창 root 면적비가 이보다 작으면 대화상자/팝업(OVERLAY)으로 본다. TODO: VERIFY ON DEVICE */
     val overlayMaxRootAreaRatio: Float = DetectionConfig.OVERLAY_MAX_ROOT_AREA_RATIO,
+    /** 플레이어가 보이는 활성 창이 이보다 작으면 작은 창(PiP)으로 본다. 분할 화면은 걸리지 않게 둔다. TODO: VERIFY ON DEVICE */
+    val pipMaxRootAreaRatio: Float = DetectionConfig.PIP_MAX_ROOT_AREA_RATIO,
     /** 보조 컨테이너(reel_*)를 "전체화면"으로 볼 면적비. TODO: VERIFY ON DEVICE */
     val minContainerAreaRatio: Float = DetectionConfig.MIN_CONTAINER_AREA_RATIO,
     /** 이탈 신호 후 세션을 끝내기까지 기다리는 시간. TODO: VERIFY ON DEVICE */
