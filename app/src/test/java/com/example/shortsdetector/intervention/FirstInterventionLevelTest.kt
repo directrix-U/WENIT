@@ -50,7 +50,7 @@ class FirstInterventionLevelTest {
 
     private fun startDemo(startLevel: Int = 1) {
         InterventionPolicyPreferences.write(prefs, InterventionPolicy(level = startLevel))
-        InterventionPolicyPreferences.writeDemoMode(prefs, true, nowMs = 5L)
+        InterventionPolicyPreferences.writeDemoMode(prefs, true)
     }
 
     /** 실기기 기록과 같은 순서: Lv.1 → 계속 보기 → Lv.2 → 계속 보기 → Lv.3 */
@@ -110,7 +110,7 @@ class FirstInterventionLevelTest {
     @Test
     fun `first intervention respects maxLevel in demo`() {
         InterventionPolicyPreferences.write(prefs, InterventionPolicy(maxLevel = 2))
-        InterventionPolicyPreferences.writeDemoMode(prefs, true, nowMs = 5L)
+        InterventionPolicyPreferences.writeDemoMode(prefs, true)
         InterventionPolicyPreferences.writeLevelState(prefs, 3, LevelStreaks())
         assertEquals(2, level())
     }
@@ -167,27 +167,6 @@ class FirstInterventionLevelTest {
 
     private fun session(id: String, status: SessionStatus = SessionStatus.CLOSED, demo: Boolean = false, seed: Boolean = false) =
         SessionRecord(id, "p", "r", 0, 1, status, 1, 0, 0, 0, "HIGH", null, null, 0, isDemo = demo, isSeed = seed)
-
-    @Test
-    fun `seed and demo records do not spend the real daily limit`() {
-        val records = listOf(
-            intervention("real"),
-            intervention("seed", seed = true),
-            intervention("demo", demo = true),
-            intervention("suppressed", method = InterventionMethod.SUPPRESSED_BY_DAILY_LIMIT)
-        )
-        assertEquals(1, LiveRecordFilter.realCount(records))
-    }
-
-    @Test
-    fun `demo counter only counts this demo run`() {
-        val records = listOf(
-            intervention("old", at = 1L, demo = true),
-            intervention("new", at = 10L, demo = true),
-            intervention("seed", at = 10L, demo = true, seed = true)
-        )
-        assertEquals(1, LiveRecordFilter.demoCount(records, demoFromMs = 5L))
-    }
 
     @Test
     fun `seed and demo sessions are not used for live goal remaining`() {

@@ -18,8 +18,8 @@ data class InterventionPolicy(
     val escalateAfterSkips: Int = 2,
     /** 몇 번 연속 스스로 멈추면 한 단계 내리는가 */
     val deescalateAfterStops: Int = 2,
+    /** 개입 사이의 간격. 개입 빈도는 이 값으로만 조절한다 */
     val cooldownMs: Long = DetectionConfig.MIN_RENOTIFY_INTERVAL_MS,
-    val maxDailyInterventions: Int = 10,
     /** 올라갈 수 있는 최대 단계. 2 면 전체 화면 숨 고르기(Lv.3)를 쓰지 않는다. */
     val maxLevel: Int = InterventionPolicyBounds.MAX_LEVEL
 ) {
@@ -32,8 +32,7 @@ data class InterventionPolicy(
             maxLevel = top,
             escalateAfterSkips = escalateAfterSkips.coerceIn(ESCALATE_AFTER_SKIPS),
             deescalateAfterStops = deescalateAfterStops.coerceIn(DEESCALATE_AFTER_STOPS),
-            cooldownMs = cooldownMs.coerceIn(COOLDOWN_MS),
-            maxDailyInterventions = maxDailyInterventions.coerceIn(MAX_DAILY_INTERVENTIONS)
+            cooldownMs = cooldownMs.coerceIn(COOLDOWN_MS)
         )
     }
 
@@ -54,11 +53,11 @@ data class InterventionPolicy(
 
 /** 하드 범위. 사용자·에이전트 어느 쪽도 이 밖으로 나갈 수 없다. 값은 임시값이다(명세의 "미정: 하드 범위 값"). */
 object InterventionPolicyBounds {
-    const val MIN_LEVEL = 1
-    const val MAX_LEVEL = 3
+    val MIN_LEVEL = InterventionLevels.MIN
+    val MAX_LEVEL = InterventionLevels.MAX
 
     /** 정책의 최대 단계로 고를 수 있는 값 */
-    val MAX_LEVEL_SETTING = 2..MAX_LEVEL
+    val MAX_LEVEL_SETTING = InterventionLevels.maxLevelChoices.first().number..MAX_LEVEL
 
     /** 하한은 임계값 선택지의 최솟값(10초, 기기 테스트용)과 같다. */
     val THRESHOLD_MS = 10_000L..3_600_000L
@@ -67,7 +66,6 @@ object InterventionPolicyBounds {
 
     /** 하한은 기존 재알림 쿨다운과 같다. 그 밑으로 내리면 알림 폭주 방어선이 약해진다. */
     val COOLDOWN_MS = DetectionConfig.MIN_RENOTIFY_INTERVAL_MS..3_600_000L
-    val MAX_DAILY_INTERVENTIONS = 1..30
 }
 
 /**
@@ -82,11 +80,13 @@ object InterventionPolicyCodec {
         "escalateAfterSkips" to p.escalateAfterSkips,
         "deescalateAfterStops" to p.deescalateAfterStops,
         "cooldownMs" to p.cooldownMs,
-        "maxDailyInterventions" to p.maxDailyInterventions,
         "maxLevel" to p.maxLevel
     ).joinToString(";") { (k, v) -> "$k=$v" }
 
-    /** 없는 항목은 기본값으로 채운다(나중에 필드가 늘어도 옛 기록을 읽기 위함). 읽을 항목이 하나도 없으면 null. */
+    /**
+     * 없는 항목은 기본값으로 채운다(나중에 필드가 늘어도 옛 기록을 읽기 위함). 모르는 항목은 건너뛴다
+     * (옛 저장값의 maxDailyInterventions). 읽을 항목이 하나도 없으면 null.
+     */
     fun decode(text: String): InterventionPolicy? {
         val values = text.split(';').mapNotNull { part ->
             val (k, v) = part.split('=', limit = 2).takeIf { it.size == 2 } ?: return@mapNotNull null
@@ -102,7 +102,6 @@ object InterventionPolicyCodec {
             escalateAfterSkips = int("escalateAfterSkips", d.escalateAfterSkips),
             deescalateAfterStops = int("deescalateAfterStops", d.deescalateAfterStops),
             cooldownMs = values["cooldownMs"] ?: d.cooldownMs,
-            maxDailyInterventions = int("maxDailyInterventions", d.maxDailyInterventions),
             maxLevel = int("maxLevel", d.maxLevel)
         )
     }
@@ -112,11 +111,9 @@ object InterventionPolicyCodec {
  * 판정에 쓸 최종 값.
  * @param policy 시연 모드면 시연 값을 덧씌운 정책
  * @param thresholdMs PER_SESSION 목표까지 반영한 기준 시간
- * @param demoRunId 시연 모드를 켠 시각. 켤 때마다 바뀌어 시연 전용 하루 카운터를 초기화하는 기준이 된다. 시연이 아니면 null.
  */
 data class ResolvedPolicy(
     val policy: InterventionPolicy,
     val thresholdMs: Long,
-    val demoMode: Boolean,
-    val demoRunId: Long? = null
+    val demoMode: Boolean
 )

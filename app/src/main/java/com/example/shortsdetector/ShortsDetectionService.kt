@@ -23,6 +23,7 @@ import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.InterventionMethod
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionUserReason
+import com.example.shortsdetector.data.usage.ReturnTracker
 import com.example.shortsdetector.data.usage.SessionRecorder
 import com.example.shortsdetector.data.usage.SystemUsageClock
 import com.example.shortsdetector.data.usage.UsageDatabase
@@ -60,7 +61,7 @@ import java.util.concurrent.TimeUnit
  *  2) 스냅샷  : 활성 창 트리를 구조 값만 담은 스냅샷으로 복사 (화면 원문은 복사하지 않음)
  *  3) 어댑터  : 앱별 규칙 → SHORTFORM / PARTIAL / NOT_SHORTFORM / UNKNOWN
  *  4) 상태    : 공통 상태 머신 (연속 확인, 일시 가림, 이탈 대기)
- *  5) 개입    : 세션 안 확정 시청시간이 정책의 기준 시간에 닿으면 1회 (쿨다운·하루 상한 적용).
+ *  5) 개입    : 세션 안 확정 시청시간이 정책의 기준 시간에 닿으면 개입하고, 계속 보면 쿨다운마다 반복한다.
  *              현재 단계의 팝업(TYPE_ACCESSIBILITY_OVERLAY)을 띄우고, 팝업을 끄거나 실패하면 알림으로 대신한다.
  *              세션이 끝나면 팝업·알림을 지운다. 반응은 [InterventionCoordinator] 가 기록하고 단계에 반영한다.
  *
@@ -83,8 +84,7 @@ class ShortsDetectionService : AccessibilityService() {
     private val engine = DetectionEngine(
         tuning,
         listOf(YouTubeShortsAdapter(tuning), InstagramReelsAdapter(tuning)),
-        DetectionConfig.MIN_RENOTIFY_INTERVAL_MS,
-        currentDay = { LocalDate.now().toEpochDay() }
+        DetectionConfig.MIN_RENOTIFY_INTERVAL_MS
     )
     private val snapshotter = AccessibilitySnapshotter(DetectionConfig.MAX_NODES_VISITED)
     private val popup = InterventionPopup(this)
@@ -126,14 +126,7 @@ class ShortsDetectionService : AccessibilityService() {
     }
 
     /** 정책·시연 모드·목표가 바뀌면 다음 판정부터 반영한다. */
-    private val policyListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT) {
-            engine.resetDailyInterventions()
-            Log.i(TAG, "기록 삭제: 하루 개입 수 초기화")
-        } else {
-            applyPolicy()
-        }
-    }
+    private val policyListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> applyPolicy() }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -173,21 +166,9 @@ class ShortsDetectionService : AccessibilityService() {
             coordinator = InterventionCoordinator(
                 store, PreferencesPolicyStore(InterventionPolicyPreferences.prefs(this)), copyProvider, SystemUsageClock
             )
-            seedDailyInterventions(store)
+            store.read { s -> ReturnTracker(s).sweep(SystemUsageClock.epochNowMs()) }
         } catch (e: RuntimeException) {
             Log.w(TAG, "기록 저장소 시작 실패: ${e.javaClass.simpleName}")
-        }
-    }
-
-    /** 재시작해도 하루 상한이 0 부터 다시 세지지 않게 오늘 기록에서 복구한다. 시연 카운터는 이번 시연 이후만 센다. */
-    private fun seedDailyInterventions(store: BackgroundUsageStore) {
-        val (from, to) = todayRange()
-        val demoFrom = InterventionPolicyPreferences.resolve(this).demoRunId ?: Long.MAX_VALUE
-        store.read { s ->
-            val today = s.interventionsBetween(from, to)
-            val real = LiveRecordFilter.realCount(today)
-            val demo = LiveRecordFilter.demoCount(today, demoFrom)
-            handler.post { engine.seedDailyInterventions(real, demo) }
         }
     }
 
@@ -230,11 +211,11 @@ class ShortsDetectionService : AccessibilityService() {
     private fun applyPolicy() {
         goals = GoalPreferences.load(this)
         val r = InterventionPolicyPreferences.resolve(this)
-        engine.applyPolicy(r.thresholdMs, r.policy.cooldownMs, r.policy.maxDailyInterventions, r.demoRunId)
+        engine.applyPolicy(r.thresholdMs, r.policy.cooldownMs)
         Log.i(
             TAG,
             "개입 정책: 기준=${r.thresholdMs}ms 단계=${r.policy.level} 쿨다운=${r.policy.cooldownMs}ms " +
-                "상한=${r.policy.maxDailyInterventions} 시연=${r.demoMode}"
+                "시연=${r.demoMode}"
         )
     }
 
@@ -425,6 +406,7 @@ class ShortsDetectionService : AccessibilityService() {
         if (screenWidth <= 0 || screenHeight <= 0) cacheScreenSize()
         syncPausedPlayback()
         val now = SystemClock.elapsedRealtime()
+        engine.setInterventionOpen(popup.isShowing, now)
 
         val output = try {
             observe(now)
@@ -479,6 +461,7 @@ class ShortsDetectionService : AccessibilityService() {
         val verdict = output.observation.verdict
         DetectionStatus.update(step.current, output.observation.packageName, verdict?.reason)
         record { it.onOutput(output, engine.sessionProgress()) }
+        recordReturn(output)
 
         // 판정 로그: 원문 없이 상태 / 근거 코드 / 신호 플래그 / 면적비만 남긴다.
         if (!step.ignored) {
@@ -536,24 +519,26 @@ class ShortsDetectionService : AccessibilityService() {
                 )
             }
         }
-        if (output.suppressedByDailyLimit) {
-            Log.i(TAG, "[$source] 개입 임계 도달 (하루 상한 — 생략)")
-            val suppressed = InterventionPolicyPreferences.resolve(this)
-            record {
-                it.onIntervention(
-                    engine.sessionProgress()?.sessionNumber, InterventionMethod.SUPPRESSED_BY_DAILY_LIMIT,
-                    engine.sessionProgress()?.estimatedWatchMs ?: 0L, engine.watchThresholdMs,
-                    level = suppressed.policy.level, isDemo = suppressed.demoMode
-                )
-            }
-        }
         output.notifySession?.let { n ->
             intervene(n, output.observation.packageName, output.notifyWatchMs ?: 0L, output.observation.atMs, source)
         }
     }
 
+    /** 멈춘 뒤 다시 돌아왔는지 남긴다. 앞선 쓰기가 끝난 뒤 저장 스레드에서 처리한다. */
+    private fun recordReturn(output: EngineOutput) {
+        val shorts = output.enteredShortform
+        if (!shorts && !output.openedTargetApp) return
+        val now = SystemUsageClock.epochNowMs()
+        usageStore?.read { s ->
+            val tracker = ReturnTracker(s)
+            if (shorts) tracker.onShortsReturned(now) else tracker.onTargetAppOpened(now)
+        }
+    }
+
     /** 현재 단계의 팝업을 우선 띄우고, 꺼져 있거나 실패하면 알림으로 대신한다. 둘 다 실패하면 쿨다운을 걸지 않는다. */
     private fun intervene(session: Int, pkg: String?, watchMs: Long, atMs: Long, source: String) {
+        // 알림으로 개입 중이면 답 없는 앞선 개입이 남아 있다. 먼저 끝내야 단계가 그 결과를 반영한다.
+        coordinator?.let { c -> guarded { c.abandon() } }
         val interventionId = recorder?.newInterventionId()
         val resolved = InterventionPolicyPreferences.resolve(this)
         val level = resolved.policy.level
@@ -581,6 +566,7 @@ class ShortsDetectionService : AccessibilityService() {
             if (shown) coordinator?.begin(interventionId, session, level)
         }
         if (shown) engine.onNotificationPosted(atMs)
+        engine.setInterventionOpen(popupShown, atMs)
     }
 
     private val popupListener = object : InterventionPopup.Listener {
@@ -595,7 +581,7 @@ class ShortsDetectionService : AccessibilityService() {
                 Log.i(TAG, "개입 반응: Lv.${result.level} $outcome → Lv.${result.nextLevel}")
                 val again = result.reinterveneAfterWatchMs ?: return@guarded
                 engine.sessionProgress()?.takeIf { it.sessionNumber == result.sessionNumber }?.let {
-                    engine.rearmIntervention(it.sessionNumber, it.estimatedWatchMs + again)
+                    engine.delayIntervention(it.sessionNumber, it.estimatedWatchMs + again)
                 }
             }
         }

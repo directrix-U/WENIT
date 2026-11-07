@@ -158,10 +158,9 @@ class InterventionHardeningTest {
 
     private val tuning = DetectionTuning()
 
-    private fun engine(cooldownMs: Long = 1_000, maxDaily: Int = Int.MAX_VALUE) = DetectionEngine(
-        tuning, listOf(YouTubeShortsAdapter(tuning)), cooldownMs,
-        watchThresholdMs = 30_000, maxDailyInterventions = maxDaily, currentDay = { 1L }
-    ).also { it.setEnabledPackages(setOf(YT), 0) }
+    private fun engine(cooldownMs: Long = 1_000) =
+        DetectionEngine(tuning, listOf(YouTubeShortsAdapter(tuning)), cooldownMs, watchThresholdMs = 30_000)
+            .also { it.setEnabledPackages(setOf(YT), 0) }
 
     private fun DetectionEngine.frame(t: Long) =
         onSnapshot(t, Fixtures.youtubeShorts()).also { if (it.notifySession != null) onNotificationPosted(t) }
@@ -263,77 +262,6 @@ class InterventionHardeningTest {
         return watch(from + 1_000, from + 40_000).also { leave(from + 41_000) }
     }
 
-    @Test
-    fun `demo uses its own counter and does not spend the real daily limit`() {
-        val e = engine(maxDaily = 1)
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        assertEquals(1, e.session(0).count { it.notifySession != null })
-        assertEquals(1, e.session(60_000).count { it.suppressedByDailyLimit })
-
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = null)
-        assertEquals(1, e.session(120_000).count { it.notifySession != null })
-    }
-
-    @Test
-    fun `turning demo on again resets its counter, reapplying the same run does not`() {
-        val e = engine(maxDaily = 1)
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        e.session(0)
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        assertEquals(1, e.session(60_000).count { it.suppressedByDailyLimit })
-
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 200)
-        assertEquals(1, e.session(120_000).count { it.notifySession != null })
-    }
-
-    @Test
-    fun `a used real limit does not block demo and restored demo count still applies`() {
-        val e = engine(maxDaily = 1)
-        e.seedDailyInterventions(1)
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        assertEquals(1, e.session(0).count { it.notifySession != null })
-
-        val restarted = engine(maxDaily = 1)
-        restarted.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        restarted.seedDailyInterventions(0, 1)
-        assertEquals(1, restarted.session(0).count { it.suppressedByDailyLimit })
-    }
-
-    @Test
-    fun `resolved policy exposes the run id only while demo mode is on`() {
-        val prefs = FakeSharedPreferences()
-        assertNull(InterventionPolicyPreferences.resolve(prefs, emptyList()).demoRunId)
-        InterventionPolicyPreferences.writeDemoMode(prefs, true, nowMs = 42)
-        assertEquals(42L, InterventionPolicyPreferences.resolve(prefs, emptyList()).demoRunId)
-        InterventionPolicyPreferences.writeDemoMode(prefs, false)
-        assertNull(InterventionPolicyPreferences.resolve(prefs, emptyList()).demoRunId)
-    }
-
-    @Test
-    fun `clearing records resets both daily counters`() {
-        val e = engine(maxDaily = 1)
-        e.seedDailyInterventions(1, 1)
-        assertEquals(1, e.session(0).count { it.suppressedByDailyLimit })
-
-        e.resetDailyInterventions()
-        assertEquals(1, e.session(60_000).count { it.notifySession != null })
-
-        e.resetDailyInterventions()
-        e.applyPolicy(30_000, 1_000, 1, demoRunId = 100)
-        assertEquals(1, e.session(120_000).count { it.notifySession != null })
-    }
-
-    @Test
-    fun `records cleared mark changes on every delete and keeps the policy`() {
-        val prefs = FakeSharedPreferences()
-        InterventionPolicyPreferences.write(prefs, InterventionPolicy(thresholdMs = 60_000))
-        InterventionPolicyPreferences.writeRecordsCleared(prefs, 5)
-        assertEquals(5L, prefs.getLong(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT, 0))
-        InterventionPolicyPreferences.writeRecordsCleared(prefs, 6)
-        assertEquals(6L, prefs.getLong(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT, 0))
-        assertEquals(60_000, InterventionPolicyPreferences.read(prefs).thresholdMs)
-    }
-
     // --- 10초 기준 ---
 
     @Test
@@ -353,7 +281,7 @@ class InterventionHardeningTest {
     @Test
     fun `engine intervenes at ten seconds`() {
         val e = engine()
-        e.applyPolicy(10_000, 1_000, 10)
+        e.applyPolicy(10_000, 1_000)
         e.enter(0)
         val first = e.watch(1_000, 15_000).first { it.notifySession != null }
         assertTrue(first.notifyWatchMs!! in 10_000..11_000)
@@ -430,7 +358,7 @@ class InterventionHardeningTest {
 
     @Test
     fun `migration 2 to 3 only adds columns and marks known demo changes`() {
-        assertEquals(6, UsageSchema.VERSION)
+        assertEquals(7, UsageSchema.VERSION)
         val sql = UsageSchema.MIGRATE_2_TO_3.joinToString("\n").uppercase()
         assertFalse("DROP" in sql || "DELETE" in sql || "RENAME" in sql)
         assertEquals(1, UsageSchema.MIGRATE_2_TO_3.count { it.startsWith("UPDATE") })

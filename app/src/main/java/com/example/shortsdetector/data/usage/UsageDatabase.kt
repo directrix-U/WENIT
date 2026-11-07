@@ -25,6 +25,7 @@ class UsageDatabase private constructor(context: Context) :
         UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
         UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
         UsageSchema.MIGRATE_5_TO_6.forEach(db::execSQL)
+        UsageSchema.MIGRATE_6_TO_7.forEach(db::execSQL)
     }
 
     /** SQLiteOpenHelper 가 트랜잭션으로 감싸 호출한다. 기존 기록은 지우지 않는다. */
@@ -34,6 +35,7 @@ class UsageDatabase private constructor(context: Context) :
         if (oldVersion < 4) UsageSchema.MIGRATE_3_TO_4.forEach(db::execSQL)
         if (oldVersion < 5) UsageSchema.MIGRATE_4_TO_5.forEach(db::execSQL)
         if (oldVersion < 6) UsageSchema.MIGRATE_5_TO_6.forEach(db::execSQL)
+        if (oldVersion < 7) UsageSchema.MIGRATE_6_TO_7.forEach(db::execSQL)
     }
 
     override fun upsertSession(record: SessionRecord) {
@@ -73,8 +75,26 @@ class UsageDatabase private constructor(context: Context) :
             put("outcome", record.outcome?.name)
             put("is_demo", if (record.isDemo) 1 else 0)
             put("is_seed", if (record.isSeed) 1 else 0)
+            put("return_status", record.returnStatus?.name)
+            put("shorts_return_ms", record.shortsReturnMs)
+            put("app_return_ms", record.appReturnMs)
         }
         writableDatabase.insertWithOnConflict("interventions", null, v, SQLiteDatabase.CONFLICT_IGNORE)
+    }
+
+    override fun interventionsAwaitingReturn(): List<InterventionRecord> =
+        readableDatabase.query(
+            "interventions", null, "outcome = ? AND return_status IS NULL",
+            arrayOf(InterventionOutcome.STOPPED.name), null, null, "occurred_at_ms ASC"
+        ).use { c -> buildList { while (c.moveToNext()) add(c.toIntervention()) } }
+
+    override fun setInterventionReturn(id: String, status: InterventionReturn?, shortsReturnMs: Long?, appReturnMs: Long?) {
+        val v = ContentValues().apply {
+            put("return_status", status?.name)
+            put("shorts_return_ms", shortsReturnMs)
+            put("app_return_ms", appReturnMs)
+        }
+        writableDatabase.update("interventions", v, "id = ? AND return_status IS NULL", arrayOf(id))
     }
 
     override fun setInterventionAction(id: String, action: InterventionAction, atMs: Long) {
@@ -237,6 +257,9 @@ class UsageDatabase private constructor(context: Context) :
         level = longOrNull("level")?.toInt(),
         userReason = str("user_reason")?.let { r -> InterventionUserReason.entries.firstOrNull { it.name == r } },
         outcome = str("outcome")?.let { o -> InterventionOutcome.entries.firstOrNull { it.name == o } },
+        returnStatus = str("return_status")?.let { r -> InterventionReturn.entries.firstOrNull { it.name == r } },
+        shortsReturnMs = longOrNull("shorts_return_ms"),
+        appReturnMs = longOrNull("app_return_ms"),
         isDemo = long("is_demo") != 0L,
         isSeed = long("is_seed") != 0L
     )

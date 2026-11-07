@@ -119,13 +119,12 @@ class SeedDataResetTest {
     }
 
     @Test
-    fun `level streaks restart but the daily counter signal stays`() {
+    fun `level streaks restart`() {
         InterventionPolicyPreferences.writeLevelState(policyPrefs, 2, LevelStreaks(1, 1))
 
         reset.run("지웠어요")
 
         assertEquals(LevelStreaks(0, 0), InterventionPolicyPreferences.readLevelStreaks(policyPrefs))
-        assertFalse(policyPrefs.contains(InterventionPolicyPreferences.KEY_RECORDS_CLEARED_AT))
     }
 
     @Test

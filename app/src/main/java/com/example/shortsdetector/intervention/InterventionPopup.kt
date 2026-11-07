@@ -21,8 +21,10 @@ import com.example.shortsdetector.ui.WenitActivity
  * 단계별 개입 팝업. 접근성 서비스의 TYPE_ACCESSIBILITY_OVERLAY 창으로 띄운다
  * (SYSTEM_ALERT_WINDOW 권한 불필요. 이 창 타입은 접근성 서비스 Context 의 WindowManager 로만 추가할 수 있다).
  *
- *  - Lv.1 가벼운 알림 / Lv.2 성찰 질문: 화면 중앙 카드. 바깥 터치는 아래 앱으로 전달한다.
- *  - Lv.3 숨 고르기: 화면 전체를 덮는다. 시간 흐름은 [BreathingTimeline] 이 정한다. 카운트다운 동안은 버튼이 없고
+ * 단계별 레이아웃·창 모양은 [InterventionLevels] 가 정하고, 여기에는 종류별 화면 동작([Screen])만 있다.
+ *
+ *  - 가벼운 알림 / 성찰 질문: 화면 중앙 카드. 바깥 터치는 아래 앱으로 전달한다.
+ *  - 숨 고르기: 화면 전체를 덮는다. 시간 흐름은 [BreathingTimeline] 이 정한다. 카운트다운 동안은 버튼이 없고
  *    터치를 막으며, 끝나면 버튼을 보여 주고, 답이 없으면 스스로 닫는다.
  *    홈·뒤로 같은 시스템 탐색은 막지 않으며, 이탈 신호가 잡히면 서비스가 바로 닫는다. 사용자가 끌 수 없는 상태는 없다.
  *  - 포커스를 가져가지 않는다(FLAG_NOT_FOCUSABLE). 키보드·뒤로가기 등은 아래 앱이 계속 받는다.
@@ -53,6 +55,45 @@ class InterventionPopup(private val service: AccessibilityService) {
         fun beforeLeaving(proceed: () -> Unit)
     }
 
+    /**
+     * 종류별 화면 동작. 새 [InterventionKind] 는 여기에 구현을 더한다.
+     * 이미지·애니메이션은 레이아웃과 [attached] 에서 시작하고, 탭·끌기로 치우는 화면은 [Host] 를 쓴다.
+     */
+    private interface Screen {
+        /** 창을 붙이기 전. 버튼을 연결한다. */
+        fun bind(v: View, host: Host) = Unit
+
+        /** 창을 붙인 뒤 */
+        fun attached(v: View, host: Host) = Unit
+    }
+
+    /** 화면이 쓰는 창 조작 */
+    private interface Host {
+        val listener: Listener
+
+        /** 사용자의 반응으로 개입을 끝낸다. 버튼이 없는 화면도 이것으로 끝낸다. */
+        fun answer(outcome: InterventionOutcome)
+
+        /** [OverlayWindow.FLOATING] 창을 옮긴다. 끌기에 쓴다. */
+        fun moveWindowBy(dx: Int, dy: Int)
+    }
+
+    private val noticeScreen = object : Screen {}
+
+    private val questionScreen = object : Screen {
+        override fun bind(v: View, host: Host) = bindReasons(v, host.listener)
+    }
+
+    private val breathingScreen = object : Screen {
+        override fun attached(v: View, host: Host) = startBreathing(v, host.listener)
+    }
+
+    private fun screenFor(kind: InterventionKind): Screen = when (kind) {
+        InterventionKind.NOTICE -> noticeScreen
+        InterventionKind.QUESTION -> questionScreen
+        InterventionKind.BREATHING -> breathingScreen
+    }
+
     private val handler = Handler(Looper.getMainLooper())
     private var view: View? = null
     private var timeline: BreathingTimeline? = null
@@ -67,24 +108,21 @@ class InterventionPopup(private val service: AccessibilityService) {
         dismiss()
         val wm = service.getSystemService(WindowManager::class.java) ?: return false
         return try {
-            val layout = when (level) {
-                1 -> R.layout.overlay_intervention_lv1
-                2 -> R.layout.overlay_intervention_lv2
-                else -> R.layout.overlay_intervention_lv3
-            }
-            val v = LayoutInflater.from(service).inflate(layout, null)
+            val spec = InterventionLevels.of(level)
+            val screen = screenFor(spec.kind)
+            val v = LayoutInflater.from(service).inflate(spec.layout, null)
             v.findViewById<TextView>(R.id.popupTitle).text = copy.title
             v.findViewById<TextView?>(R.id.popupBody)?.apply {
                 text = copy.body.orEmpty()
                 visibility = if (copy.body.isNullOrEmpty()) View.GONE else View.VISIBLE
             }
-            bindButtons(v, watchMs, listener)
-            if (level == 2) bindReasons(v, listener)
-
-            val fullScreen = level >= InterventionPolicyBounds.MAX_LEVEL
-            wm.addView(v, if (fullScreen) fullScreenParams() else cardParams())
+            val params = paramsFor(spec.window)
+            val host = hostFor(v, params, watchMs, listener)
+            bindButtons(v, host)
+            screen.bind(v, host)
+            wm.addView(v, params)
             view = v
-            if (fullScreen) startBreathing(v, listener)
+            screen.attached(v, host)
             true
         } catch (e: RuntimeException) {
             // BadTokenException, InflateException 등. 원문 없이 예외 종류만 남긴다.
@@ -94,20 +132,39 @@ class InterventionPopup(private val service: AccessibilityService) {
         }
     }
 
-    private fun bindButtons(v: View, watchMs: Long, listener: Listener) {
-        var answered = false
-        fun answer(outcome: InterventionOutcome) {
-            if (answered) return
-            answered = true
-            try {
-                listener.onResponse(outcome)
-            } catch (e: RuntimeException) {
-                Log.w(ShortsDetectionService.TAG, "개입 반응 기록 실패: ${e.javaClass.simpleName}")
+    private fun hostFor(v: View, params: WindowManager.LayoutParams, watchMs: Long, listener: Listener): Host {
+        val owner = listener
+        return object : Host {
+            private var answered = false
+            override val listener get() = owner
+
+            override fun answer(outcome: InterventionOutcome) {
+                if (answered) return
+                answered = true
+                try {
+                    owner.onResponse(outcome)
+                } catch (e: RuntimeException) {
+                    Log.w(ShortsDetectionService.TAG, "개입 반응 기록 실패: ${e.javaClass.simpleName}")
+                }
+                if (outcome == InterventionOutcome.STOPPED) owner.beforeLeaving { openApp(watchMs) } else dismiss()
             }
-            if (outcome == InterventionOutcome.STOPPED) listener.beforeLeaving { openApp(watchMs) } else dismiss()
+
+            override fun moveWindowBy(dx: Int, dy: Int) {
+                params.x += dx
+                params.y += dy
+                try {
+                    service.getSystemService(WindowManager::class.java)?.updateViewLayout(v, params)
+                } catch (e: RuntimeException) {
+                    Log.w(ShortsDetectionService.TAG, "개입 창 이동 실패: ${e.javaClass.simpleName}")
+                }
+            }
         }
-        v.findViewById<View>(R.id.popupContinue).setOnClickListener { answer(InterventionOutcome.CONTINUED) }
-        v.findViewById<View>(R.id.popupStop).setOnClickListener { answer(InterventionOutcome.STOPPED) }
+    }
+
+    /** 버튼이 없는 화면도 있으므로 있을 때만 연결한다. */
+    private fun bindButtons(v: View, host: Host) {
+        v.findViewById<View?>(R.id.popupContinue)?.setOnClickListener { host.answer(InterventionOutcome.CONTINUED) }
+        v.findViewById<View?>(R.id.popupStop)?.setOnClickListener { host.answer(InterventionOutcome.STOPPED) }
     }
 
     /** 이유를 하나 고르면 답 버튼이 켜진다. 팝업 바깥은 막지 않으므로 고르지 않아도 영상을 볼 수 있다. */
@@ -147,6 +204,12 @@ class InterventionPopup(private val service: AccessibilityService) {
         }
     }
 
+    private fun paramsFor(window: OverlayWindow) = when (window) {
+        OverlayWindow.CARD -> cardParams()
+        OverlayWindow.FULL_SCREEN -> fullScreenParams()
+        OverlayWindow.FLOATING -> floatingParams()
+    }
+
     private fun cardParams(): WindowManager.LayoutParams {
         val metrics = service.resources.displayMetrics
         val maxWidth = service.resources.getDimensionPixelSize(R.dimen.popup_max_width)
@@ -172,6 +235,17 @@ class InterventionPopup(private val service: AccessibilityService) {
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
         PixelFormat.TRANSLUCENT
     ).apply { windowAnimations = android.R.style.Animation_Dialog }
+
+    /** FLAG_NOT_TOUCH_MODAL: 창 바깥 터치는 아래 앱으로 간다. 위치는 왼쪽 위 기준이라 끌기로 옮기기 쉽다. */
+    private fun floatingParams() = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.WRAP_CONTENT,
+        WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+        PixelFormat.TRANSLUCENT
+    ).apply { gravity = Gravity.TOP or Gravity.START }
 
     fun dismiss() {
         timeline?.cancel()

@@ -409,7 +409,7 @@ class DetectionEngineScenarioTest {
     }
 
     @Test
-    fun `threshold - no popup at session start, one popup after watching long enough`() {
+    fun `threshold - no popup at session start, a popup after watching long enough, then every cooldown`() {
         val e = engine(thresholdMs = 60_000)
         val start = e.enterShorts(0)
         assertEquals(1, start.step.startedSession)
@@ -423,8 +423,9 @@ class DetectionEngineScenarioTest {
         assertTrue(out.notifyWatchMs!! >= 60_000)
         // 세션 시작(500ms) 기준 60초 근처, 타이머 1회 오차 이내
         assertTrue("notified at $t", t in 60_500L..62_500L)
-        // 계속 봐도 같은 세션에서 다시 뜨지 않는다
-        assertNull(e.watchUntilNotified(t + 1_000, t + 300_000))
+        // 계속 보면 쿨다운이 지나 다시 뜬다
+        assertNull(e.watchUntilNotified(t + 1_000, t + 25_000))
+        assertNotNull(e.watchUntilNotified(t + 25_000, t + 35_000))
     }
 
     @Test

@@ -11,8 +11,11 @@ import com.example.shortsdetector.data.usage.DailyUsageCalculator
 import com.example.shortsdetector.data.usage.InterventionMethod
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionRecord
+import com.example.shortsdetector.data.usage.InterventionReturn
 import com.example.shortsdetector.data.usage.InterventionUserReason
 import com.example.shortsdetector.data.usage.SessionRecord
+import com.example.shortsdetector.intervention.InterventionKind
+import com.example.shortsdetector.intervention.InterventionLevels
 import com.example.shortsdetector.intervention.InterventionPolicyBounds
 import java.time.DayOfWeek
 import java.time.Instant
@@ -89,8 +92,48 @@ data class RecentUsageStats(
     /** 사용자에게 보여 준 개입 수 */
     val deliveredInterventions: Int,
     val levelOutcomes: List<LevelOutcomes>,
-    val lv2Reasons: List<ReasonCount>
+    val lv2Reasons: List<ReasonCount>,
+    val behavior: InterventionBehavior
 )
+
+/** 단계별 반응 비율. 표본이 적으면 비율은 null 이다. */
+data class LevelRate(val level: Int, val samples: Int, val stopRate: Double?, val continueRate: Double?)
+
+/** 스스로 멈춘 뒤의 복귀 집계. 표본은 결과가 정해진 기록만 센다. 표본이 적으면 비율과 중간값은 null 이다. */
+data class ReturnStats(
+    val samples: Int,
+    val within10MinRate: Double?,
+    val within30MinRate: Double?,
+    val medianReturnMs: Long?,
+    val appOnly: Int,
+    val notReturned: Int
+) {
+    val enough: Boolean get() = samples >= InterventionBehavior.MIN_SAMPLES
+}
+
+data class SlotReasons(val slot: WatchTimeSlot, val samples: Int, val reasons: List<ReasonCount>) {
+    val enough: Boolean get() = samples >= InterventionBehavior.MIN_SAMPLES
+}
+
+/** 시간대별 계속 보기 횟수. [levels] 는 단계 → 횟수. */
+data class SlotContinued(val slot: WatchTimeSlot, val samples: Int, val levels: List<Pair<Int, Int>>) {
+    val enough: Boolean get() = samples >= InterventionBehavior.MIN_SAMPLES
+}
+
+/** 개입 뒤 행동 집계. 에이전트 입력용이고 원본 기록은 담지 않는다. */
+data class InterventionBehavior(
+    val levelRates: List<LevelRate>,
+    val returns: ReturnStats,
+    /** Lv.2 에서 이유를 고르지 않고 지나간 횟수 */
+    val lv2Unanswered: Int,
+    val lv2ReasonsBySlot: List<SlotReasons>,
+    val continuedBySlot: List<SlotContinued>
+) {
+    companion object {
+        /** 이보다 적으면 "데이터 부족" 으로 표시한다 */
+        const val MIN_SAMPLES = 5
+    }
+}
 
 data class StatsDataWindow(val fromMs: Long, val toMs: Long)
 
@@ -105,6 +148,11 @@ object UsageStatsCalculator {
 
     private val DELIVERED = setOf(InterventionMethod.POPUP, InterventionMethod.NOTIFICATION)
     private const val RECENT_DAYS = 7L
+    private const val TEN_MINUTES_MS = 600_000L
+    private const val THIRTY_MINUTES_MS = 1_800_000L
+
+    /** 사용자의 반응. INTERRUPTED 는 앱이 닫은 것이라 뺀다. */
+    private val REACTED = setOf(InterventionOutcome.STOPPED, InterventionOutcome.CONTINUED, InterventionOutcome.IGNORED)
 
     /** [today]·[week] 계산에 필요한 기록 범위(지난주 월요일 00:00 ~ 내일 00:00). */
     fun dataWindow(nowMs: Long, zone: ZoneId): StatsDataWindow {
@@ -247,9 +295,60 @@ object UsageStatsCalculator {
                     atLevel.count { it.outcome == InterventionOutcome.IGNORED }
                 )
             },
-            lv2Reasons = delivered.filter { it.level == 2 }.mapNotNull { it.userReason }
+            lv2Reasons = delivered.filter(::isQuestion).mapNotNull { it.userReason }
                 .groupingBy { it }.eachCount().map { (reason, n) -> ReasonCount(reason, n) }
-                .sortedByDescending { it.count }
+                .sortedByDescending { it.count },
+            behavior = behavior(delivered, zone)
+        )
+    }
+
+    private fun behavior(delivered: List<InterventionRecord>, zone: ZoneId): InterventionBehavior {
+        val min = InterventionBehavior.MIN_SAMPLES
+        val levels = InterventionPolicyBounds.MIN_LEVEL..InterventionPolicyBounds.MAX_LEVEL
+        val levelRates = levels.map { level ->
+            val answered = delivered.filter { it.level == level && it.outcome in REACTED }
+            val stopped = answered.count { it.outcome == InterventionOutcome.STOPPED }
+            val continued = answered.count { it.outcome == InterventionOutcome.CONTINUED }
+            val n = answered.size
+            LevelRate(
+                level, n,
+                (stopped.toDouble() / n).takeIf { n >= min },
+                (continued.toDouble() / n).takeIf { n >= min }
+            )
+        }
+        val lv2 = delivered.filter(::isQuestion)
+        val continued = delivered.filter { it.outcome == InterventionOutcome.CONTINUED && it.level != null }
+        return InterventionBehavior(
+            levelRates = levelRates,
+            returns = returnStats(delivered),
+            lv2Unanswered = lv2.count { it.userReason == null && it.outcome in REACTED },
+            lv2ReasonsBySlot = WatchTimeSlot.entries.map { slot ->
+                val chosen = lv2.filter { slotOf(it.occurredAtMs, zone) == slot }.mapNotNull { it.userReason }
+                val counts = chosen.groupingBy { it }.eachCount().map { (reason, n) -> ReasonCount(reason, n) }
+                SlotReasons(slot, chosen.size, counts.sortedByDescending { it.count })
+            },
+            continuedBySlot = WatchTimeSlot.entries.map { slot ->
+                val inSlot = continued.filter { slotOf(it.occurredAtMs, zone) == slot }
+                SlotContinued(slot, inSlot.size, levels.map { l -> l to inSlot.count { it.level == l } })
+            }
+        )
+    }
+
+    private fun isQuestion(r: InterventionRecord) =
+        r.level?.let { InterventionLevels.of(it).kind == InterventionKind.QUESTION } == true
+
+    private fun returnStats(delivered: List<InterventionRecord>): ReturnStats {
+        val finished = delivered.filter { it.returnStatus != null }
+        val back = finished.filter { it.returnStatus == InterventionReturn.SHORTS }.mapNotNull { it.shortsReturnMs }.sorted()
+        val n = finished.size
+        val enough = n >= InterventionBehavior.MIN_SAMPLES
+        return ReturnStats(
+            samples = n,
+            within10MinRate = (back.count { it <= TEN_MINUTES_MS }.toDouble() / n).takeIf { enough },
+            within30MinRate = (back.count { it <= THIRTY_MINUTES_MS }.toDouble() / n).takeIf { enough },
+            medianReturnMs = back.getOrNull(back.size / 2).takeIf { enough },
+            appOnly = finished.count { it.returnStatus == InterventionReturn.APP_ONLY },
+            notReturned = finished.count { it.returnStatus == InterventionReturn.NONE }
         )
     }
 

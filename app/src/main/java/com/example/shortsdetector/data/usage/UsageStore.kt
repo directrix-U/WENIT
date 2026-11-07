@@ -38,6 +38,12 @@ interface UsageStore {
     /** 발표용 시드 기록만 지운다. */
     fun deleteSeedRecords()
 
+    /** 스스로 멈췄고 복귀 여부를 아직 모르는 개입 */
+    fun interventionsAwaitingReturn(): List<InterventionRecord>
+
+    /** 복귀 기록을 쓴다. [status] 가 null 이면 계속 기다린다. 이미 끝난 기록은 바꾸지 않는다. */
+    fun setInterventionReturn(id: String, status: InterventionReturn?, shortsReturnMs: Long?, appReturnMs: Long?)
+
     /** 시드가 든 입력으로 나온 정책 변경 기록만 지운다. */
     fun deleteSeedPolicyChanges()
 
@@ -116,6 +122,20 @@ class InMemoryUsageStore : UsageStore {
     @Synchronized override fun deleteSeedRecords() {
         sessions.values.removeAll { it.isSeed }
         interventions.values.removeAll { it.isSeed }
+    }
+
+    @Synchronized override fun interventionsAwaitingReturn() =
+        interventions.values.filter { it.outcome == InterventionOutcome.STOPPED && it.returnStatus == null }
+
+    @Synchronized override fun setInterventionReturn(
+        id: String,
+        status: InterventionReturn?,
+        shortsReturnMs: Long?,
+        appReturnMs: Long?
+    ) {
+        val r = interventions[id] ?: return
+        if (r.returnStatus != null) return
+        interventions[id] = r.copy(returnStatus = status, shortsReturnMs = shortsReturnMs, appReturnMs = appReturnMs)
     }
 
     @Synchronized override fun deleteSeedPolicyChanges() {

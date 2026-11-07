@@ -62,7 +62,7 @@ class TwoWeekSeedTest {
         val b = DemoSeedData.build(Scenario.LATE_NIGHT_SKIPPER, today, zone, now)
         val recent = UsageStatsCalculator.recent(b.sessions, b.interventions, zone, now)
         assertEquals(7, recent.days.size)
-        assertEquals(17, recent.deliveredInterventions)      // 지난주 개입은 세지 않는다
+        assertEquals(22, recent.deliveredInterventions)      // 지난주 개입은 세지 않는다
         assertEquals(today.minusDays(7), recent.days.first().date)
     }
 

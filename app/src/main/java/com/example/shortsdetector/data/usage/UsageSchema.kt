@@ -14,10 +14,16 @@ package com.example.shortsdetector.data.usage
  * 버전 5: sessions·interventions 에 is_seed 추가. 발표용 시드 기록 표시이고 기존 기록은 0 이다.
  *
  * 버전 6: policy_changes 에 is_seed 추가. 시드가 든 입력으로 나온 에이전트 변경 표시이고, 기존 기록은 구분할 수 없어 0 이다.
+ *
+ * 버전 7: interventions 에 return_status/shorts_return_ms/app_return_ms 추가. 전부 nullable 이고 기존 기록은 null 이다.
+ * 기존 STOPPED 기록은 복귀 여부를 모르므로 값을 꾸며 넣지 않고 복귀 추적에서도 뺀다.
  */
 object UsageSchema {
 
-    const val VERSION = 6
+    const val VERSION = 7
+
+    /** 복귀를 지켜보지 않는 기록의 표시. 버전 7 이전 기록에만 쓴다. */
+    const val RETURN_UNKNOWN = "UNKNOWN"
 
     val CREATE_V1: List<String> = listOf(
         """
@@ -92,5 +98,12 @@ object UsageSchema {
 
     val MIGRATE_5_TO_6: List<String> = listOf(
         "ALTER TABLE policy_changes ADD COLUMN is_seed INTEGER NOT NULL DEFAULT 0"
+    )
+
+    val MIGRATE_6_TO_7: List<String> = listOf(
+        "ALTER TABLE interventions ADD COLUMN return_status TEXT",
+        "ALTER TABLE interventions ADD COLUMN shorts_return_ms INTEGER",
+        "ALTER TABLE interventions ADD COLUMN app_return_ms INTEGER",
+        "UPDATE interventions SET return_status = '$RETURN_UNKNOWN' WHERE outcome = 'STOPPED'"
     )
 }

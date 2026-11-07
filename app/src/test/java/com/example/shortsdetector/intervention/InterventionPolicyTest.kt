@@ -8,13 +8,14 @@ import com.example.shortsdetector.data.goal.GoalSource
 import com.example.shortsdetector.data.goal.GoalType
 import com.example.shortsdetector.testutil.FakeSharedPreferences
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class InterventionPolicyTest {
 
-    private val low = InterventionPolicy(Long.MIN_VALUE, -1, -1, -1, Long.MIN_VALUE, -1)
-    private val high = InterventionPolicy(Long.MAX_VALUE, 99, 99, 99, Long.MAX_VALUE, 999)
+    private val low = InterventionPolicy(Long.MIN_VALUE, -1, -1, -1, Long.MIN_VALUE)
+    private val high = InterventionPolicy(Long.MAX_VALUE, 99, 99, 99, Long.MAX_VALUE)
 
     @Test
     fun `default policy matches current behaviour and is inside the bounds`() {
@@ -31,14 +32,14 @@ class InterventionPolicyTest {
         assertEquals(
             InterventionPolicy(
                 b.THRESHOLD_MS.first, b.MIN_LEVEL, b.ESCALATE_AFTER_SKIPS.first, b.DEESCALATE_AFTER_STOPS.first,
-                b.COOLDOWN_MS.first, b.MAX_DAILY_INTERVENTIONS.first
+                b.COOLDOWN_MS.first
             ),
             low.clamped()
         )
         assertEquals(
             InterventionPolicy(
                 b.THRESHOLD_MS.last, b.MAX_LEVEL, b.ESCALATE_AFTER_SKIPS.last, b.DEESCALATE_AFTER_STOPS.last,
-                b.COOLDOWN_MS.last, b.MAX_DAILY_INTERVENTIONS.last
+                b.COOLDOWN_MS.last
             ),
             high.clamped()
         )
@@ -92,12 +93,26 @@ class InterventionPolicyTest {
     }
 
     @Test
+    fun `an old stored policy with a daily maximum still reads, and the old key is not written back`() {
+        val old = "thresholdMs=120000;level=2;escalateAfterSkips=2;deescalateAfterStops=2;" +
+            "cooldownMs=60000;maxDailyInterventions=7;maxLevel=3"
+        val p = FakeSharedPreferences()
+        p.values["policy"] = old
+
+        val read = InterventionPolicyPreferences.read(p)
+
+        assertEquals(InterventionPolicy(thresholdMs = 120_000, level = 2, cooldownMs = 60_000), read)
+        InterventionPolicyPreferences.write(p, read)
+        assertFalse("maxDailyInterventions" in p.values["policy"].toString())
+    }
+
+    @Test
     fun `corrupt or tampered stored policy cannot leave the bounds`() {
         val p = FakeSharedPreferences()
-        p.values["policy"] = "level=50;maxDailyInterventions=100000"
+        p.values["policy"] = "level=50;cooldownMs=1"
         val read = InterventionPolicyPreferences.read(p)
         assertEquals(3, read.level)
-        assertEquals(30, read.maxDailyInterventions)
+        assertEquals(InterventionPolicyBounds.COOLDOWN_MS.first, read.cooldownMs)
 
         p.values["policy"] = "garbage"
         assertEquals(1, InterventionPolicyPreferences.read(p).level)

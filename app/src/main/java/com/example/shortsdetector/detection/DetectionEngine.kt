@@ -17,7 +17,6 @@ import com.example.shortsdetector.detection.model.WindowStatus
 import com.example.shortsdetector.detection.state.DetectionTuning
 import com.example.shortsdetector.detection.state.ShortformStateMachine
 import com.example.shortsdetector.detection.state.Step
-import com.example.shortsdetector.intervention.DailyInterventionLimit
 import com.example.shortsdetector.intervention.NotificationGate
 import com.example.shortsdetector.intervention.WatchThresholdPolicy
 
@@ -29,16 +28,21 @@ data class EngineOutput(
     val notifySession: Int? = null,
     /** [notifySession] 일 때 그 세션의 확정 시청시간(ms). 문구 표시용. */
     val notifyWatchMs: Long? = null,
-    /** 임계값에 닿았지만 쿨다운 때문에 개입을 생략했다(로그용) */
+    /** 세션의 첫 개입이 쿨다운으로 미뤄졌다(로그용). 세션마다 한 번만 true 다. 반복 개입이 잠깐 기다리는 것은 알리지 않는다 */
     val suppressedByCooldown: Boolean = false,
-    /** 임계값에 닿았지만 오늘 개입 수가 상한에 닿아 생략했다 */
-    val suppressedByDailyLimit: Boolean = false,
     /** 세션이 끝났다 → 떠 있는 감지 알림을 지워라 */
     val cancelNotification: Boolean = false,
     /** 이번 관찰에서 이탈 신호가 처음 잡혔다 → 세션 종료 판정과 별개로 개입 오버레이를 닫아라 */
     val exitSignalStarted: Boolean = false
 ) {
     val endedSession: SessionSummary? get() = step.endedSession
+
+    /** 숏폼 세션이 시작되거나 이어졌다 */
+    val enteredShortform: Boolean get() = step.startedSession != null || step.resumedSession != null
+
+    /** 대상 앱이 앞으로 왔지만 숏폼 화면은 아니다 */
+    val openedTargetApp: Boolean
+        get() = step.current == DetectionState.TARGET_FOREGROUND && step.previous != DetectionState.TARGET_FOREGROUND
 }
 
 /**
@@ -54,45 +58,44 @@ class DetectionEngine(
     adapters: List<ShortformAdapter>,
     renotifyIntervalMs: Long,
     /** 세션 안에서 이만큼 본 뒤에 개입한다. 0 이면 세션 시작 즉시(기존 동작). */
-    watchThresholdMs: Long = 0L,
-    maxDailyInterventions: Int = Int.MAX_VALUE,
-    /** 지금의 현지 날짜(epoch day). 엔진 시각은 elapsed 라 날짜를 알 수 없어 주입받는다. */
-    private val currentDay: () -> Long = { 0L }
+    watchThresholdMs: Long = 0L
 ) {
     private val adaptersByPackage = adapters.associateBy { it.packageName }
     private val scrollTracker = ScrollSignalTracker()
     private val machine = ShortformStateMachine(tuning)
     private val gate = NotificationGate(renotifyIntervalMs)
     private val thresholdPolicy = WatchThresholdPolicy(watchThresholdMs)
-    private val dailyLimit = DailyInterventionLimit(maxDailyInterventions)
-    private val demoLimit = DailyInterventionLimit(maxDailyInterventions)
-    private var demoRunId: Long? = null
 
     /** 앱이 오버레이를 닫아 답을 못 받은 세션. 이어지면 다시 개입한다. */
     private var retrySession: Int? = null
 
-    /** 시연 모드면 시연 전용 카운터를 쓴다. 시연 개입이 실제 하루 상한을 소모하지 않는다. */
-    private val activeLimit get() = if (demoRunId != null) demoLimit else dailyLimit
+    /** 개입 화면이 떠 있다. 답할 때까지 다음 개입을 판정하지 않는다. */
+    private var interventionOpen = false
+
+    /** 쿨다운으로 미뤘다고 이미 알린 세션 */
+    private var suppressedSession: Int? = null
 
     /** 개입 임계값. 설정이 바뀌면 바로 반영한다(열린 세션에도 적용). */
     var watchThresholdMs: Long
         get() = thresholdPolicy.thresholdMs
         set(value) { thresholdPolicy.thresholdMs = value }
 
-    /** 정책 값을 반영한다. 다음 판정부터 적용한다(열린 세션 포함). */
-    fun applyPolicy(thresholdMs: Long, cooldownMs: Long, maxDailyInterventions: Int, demoRunId: Long? = null) {
+    /** 정책 값을 반영한다. 다음 판정부터 적용한다(열린 세션 포함). 개입 빈도는 쿨다운으로만 조절한다. */
+    fun applyPolicy(thresholdMs: Long, cooldownMs: Long) {
         thresholdPolicy.thresholdMs = thresholdMs
         gate.minIntervalMs = cooldownMs
-        dailyLimit.maxPerDay = maxDailyInterventions
-        demoLimit.maxPerDay = maxDailyInterventions
-        if (demoRunId != this.demoRunId) demoLimit.reset()
-        this.demoRunId = demoRunId
     }
 
-    /** 오늘 이미 보여 준 개입 수를 알려 준다(서비스 재시작 뒤 저장 기록에서 복구). */
-    fun seedDailyInterventions(count: Int, demoCount: Int = 0) {
-        dailyLimit.seed(currentDay(), count)
-        demoLimit.seed(currentDay(), demoCount)
+    /**
+     * 개입 화면이 떠 있는지 알려 준다. 사라지면 쿨다운을 그때부터 다시 잰다. 팝업을 오래 띄워 둔 뒤 답하자마자
+     * 다음 개입이 뜨면 안 되기 때문이다.
+     */
+    fun setInterventionOpen(open: Boolean, atMs: Long) {
+        val closed = interventionOpen && !open
+        interventionOpen = open
+        if (!closed) return
+        gate.markNotified(atMs)
+        machine.sessionNumber?.let { thresholdPolicy.delayUntil(it, machine.sessionWatchMs + gate.minIntervalMs) }
     }
 
     /**
@@ -115,17 +118,11 @@ class DetectionEngine(
         return ready
     }
 
-    /** 기록을 전부 지웠을 때. 다음 개입부터 0 부터 다시 센다. */
-    fun resetDailyInterventions() {
-        dailyLimit.reset()
-        demoLimit.reset()
-    }
-
     /** 켜진 동안 열린 세션의 시간을 시청시간이 아니라 가린 시간으로 센다. */
     fun setWatchHold(hold: Boolean) = machine.setWatchHold(hold)
 
-    /** 더 보기를 고른 세션을 [atWatchMs] 시청 시점에 한 번 더 판정한다. 쿨다운·하루 상한은 그대로 적용된다. */
-    fun rearmIntervention(sessionNumber: Int, atWatchMs: Long) = thresholdPolicy.rearm(sessionNumber, atWatchMs)
+    /** "5분만 더" 처럼 시간을 약속했으면 다음 개입을 [atWatchMs] 시청 시점까지 미룬다. */
+    fun delayIntervention(sessionNumber: Int, atWatchMs: Long) = thresholdPolicy.delayUntil(sessionNumber, atWatchMs)
 
     /** 현재 감지를 켠 패키지. 어댑터가 있어도 여기에 없으면 "다른 창"으로 본다. */
     var enabledPackages: Set<String> = adaptersByPackage.keys
@@ -182,10 +179,7 @@ class DetectionEngine(
             else Observation(atMs, WindowStatus.TARGET, packageName, AdapterVerdict.unknown(ReasonCode.ADAPTER_ERROR))
         )
 
-    fun onNotificationPosted(atMs: Long) {
-        gate.markNotified(atMs)
-        activeLimit.record(currentDay())
-    }
+    fun onNotificationPosted(atMs: Long) = gate.markNotified(atMs)
 
     fun forceEnd(atMs: Long): EngineOutput {
         val previous = machine.state
@@ -241,20 +235,27 @@ class DetectionEngine(
         return verdict.copy(kind = VerdictKind.NOT_SHORTFORM, confidence = Confidence.LOW, reason = ReasonCode.MINIATURE_WINDOW)
     }
 
+    /** 두 번째 개입부터는 숏폼이 온전히 보일 때만 띄운다. 댓글을 쓰는 중에 끼어들지 않는다. */
+    private fun isDue(session: Int?, watchMs: Long, state: DetectionState): Boolean =
+        thresholdPolicy.isDue(session, watchMs) &&
+            (thresholdPolicy.isFirst(session) || state == DetectionState.SHORTFORM_ESTIMATED)
+
     private fun onObservation(obs: Observation): EngineOutput {
         val step = machine.onObservation(obs)
         val session = machine.sessionNumber
         val watchMs = machine.sessionWatchMs
-        val due = thresholdPolicy.shouldDecide(session, watchMs) || retryDue(session, watchMs, step.current, obs.atMs)
-        val overLimit = due && !activeLimit.canIntervene(currentDay())
-        val canNotify = due && !overLimit && gate.canNotify(obs.atMs)
+        val due = !interventionOpen && (isDue(session, watchMs, step.current) || retryDue(session, watchMs, step.current, obs.atMs))
+        val canNotify = due && gate.canNotify(obs.atMs)
+        val first = thresholdPolicy.isFirst(session)
+        if (canNotify) thresholdPolicy.markDecided(session!!, watchMs, gate.minIntervalMs)
+        val suppressed = due && !canNotify && first && suppressedSession != session
+        if (due) suppressedSession = if (canNotify) null else session
         return EngineOutput(
             observation = obs,
             step = step,
             notifySession = if (canNotify) session else null,
             notifyWatchMs = if (canNotify) watchMs else null,
-            suppressedByCooldown = due && !overLimit && !canNotify,
-            suppressedByDailyLimit = overLimit,
+            suppressedByCooldown = suppressed,
             cancelNotification = step.endedSession != null,
             exitSignalStarted = step.current == DetectionState.EXIT_PENDING &&
                 step.previous != DetectionState.EXIT_PENDING

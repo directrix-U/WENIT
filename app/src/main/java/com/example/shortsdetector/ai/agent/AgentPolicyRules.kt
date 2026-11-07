@@ -8,19 +8,16 @@ import com.example.shortsdetector.intervention.InterventionPolicyBounds
 object AgentPolicyBounds {
     val THRESHOLD_MS = 30_000L..600_000L
     val COOLDOWN_MS = 30_000L..600_000L
-    val DAILY_MAX = 3..10
 
     /** 한 번 실행에서 바꿀 수 있는 폭 */
     const val THRESHOLD_STEP_RATIO = 0.5
     const val LEVEL_STEP = 1
-    const val DAILY_MAX_STEP = 3
 }
 
 data class AgentProposal(
     val keep: Boolean,
     val thresholdSec: Int,
     val cooldownSec: Int,
-    val dailyMax: Int,
     val startLevel: Int,
     val reason: String,
     val lv1Message: String,
@@ -43,9 +40,6 @@ object AgentPolicyRules {
                 .coerceIn(current.thresholdMs - step, current.thresholdMs + step)
                 .coerceIn(b.THRESHOLD_MS),
             cooldownMs = (p.cooldownSec * MS_PER_SECOND).coerceIn(b.COOLDOWN_MS),
-            maxDailyInterventions = p.dailyMax
-                .coerceIn(current.maxDailyInterventions - b.DAILY_MAX_STEP, current.maxDailyInterventions + b.DAILY_MAX_STEP)
-                .coerceIn(b.DAILY_MAX),
             level = p.startLevel
                 .coerceIn(current.level - b.LEVEL_STEP, current.level + b.LEVEL_STEP)
                 .coerceIn(InterventionPolicyBounds.MIN_LEVEL, current.maxLevel)
@@ -59,9 +53,6 @@ object AgentPolicyRules {
             if (before.thresholdMs != after.thresholdMs) add("기준 ${before.thresholdMs / 1000}→${after.thresholdMs / 1000}초")
             if (before.level != after.level) add("단계 ${before.level}→${after.level}")
             if (before.cooldownMs != after.cooldownMs) add("쿨다운 ${before.cooldownMs / 1000}→${after.cooldownMs / 1000}초")
-            if (before.maxDailyInterventions != after.maxDailyInterventions) {
-                add("상한 ${before.maxDailyInterventions}→${after.maxDailyInterventions}회")
-            }
         }
         return parts.ifEmpty { listOf("값 변화 없음") }.joinToString(", ")
     }
@@ -79,7 +70,10 @@ object AgentText {
         "한심", "게으", "나태", "실패자", "부끄", "창피", "망가", "최악", "의지력"
     )
 
-    fun isAllowed(text: String): Boolean = BANNED.none { it in text }
+    /** 사용자에게 보이면 안 되는 내부 이름: lv1, Lv.2, lv1Message, returnAfterStop 같은 표기 */
+    private val INTERNAL_TERM = Regex("""(?i)lv\.?\s*\d|[a-z][A-Z]""")
+
+    fun isAllowed(text: String): Boolean = BANNED.none { it in text } && !INTERNAL_TERM.containsMatchIn(text)
 
     fun clean(text: String, max: Int): String? {
         val oneLine = text.replace('\n', ' ').trim()

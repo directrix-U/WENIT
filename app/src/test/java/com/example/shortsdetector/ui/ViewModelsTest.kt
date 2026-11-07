@@ -675,7 +675,7 @@ class ViewModelsTest {
 
     @Test
     fun `demo reset is recorded as a DEFAULT change`() {
-        val before = InterventionPolicy(thresholdMs = 120_000, level = 2, maxDailyInterventions = 8)
+        val before = InterventionPolicy(thresholdMs = 120_000, level = 2)
         val change = InterventionCoordinator.demoResetChange(before, InterventionPolicy(), "id", 5, "시연 시작값")
         assertEquals(PolicyChangeSource.DEFAULT, change.source)
         assertEquals(PolicyChangeStatus.APPLIED, change.status)

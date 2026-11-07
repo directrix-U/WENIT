@@ -34,11 +34,11 @@ object ReinterventionRule {
     /**
      * @param level 사용자가 답한 개입의 단계
      * @param demoThresholdMs 시연 모드면 기준 시간. 시연에서는 Lv.1·2 의 계속 보기도 재개입해야 한 세션 안에서 단계가 이어진다.
-     * @return 지금 시청시간에서 얼마 뒤에 재개입할지. 재개입이 없으면 null.
+     * @return 쿨다운보다 늦게 재개입해야 할 때 지금 시청시간에서 얼마 뒤인지. 쿨다운을 따르면 null.
      */
     fun afterWatchMs(level: Int, outcome: InterventionOutcome, demoThresholdMs: Long?): Long? = when {
         outcome != InterventionOutcome.CONTINUED -> null
-        level >= InterventionPolicyBounds.MAX_LEVEL ->
+        InterventionLevels.of(level).promisesMoreTime ->
             if (demoThresholdMs != null) DemoMode.MORE_TIME_MS else FIVE_MORE_MINUTES_MS
         else -> demoThresholdMs
     }

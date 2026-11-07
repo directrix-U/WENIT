@@ -38,6 +38,7 @@ import com.example.shortsdetector.data.stats.DailyWatch
 import com.example.shortsdetector.data.stats.WeekStats
 import com.example.shortsdetector.data.usage.DemoSeedData
 import com.example.shortsdetector.intervention.DemoMode
+import com.example.shortsdetector.intervention.InterventionLevels
 import com.example.shortsdetector.ui.theme.WenitTokens
 import java.time.Instant
 import java.time.ZoneId
@@ -268,8 +269,10 @@ fun SettingsScreen(vm: SettingsViewModel, onAddGoal: () -> Unit, onRecommend: ()
         SecondaryButton(stringResource(R.string.settings_recommend_goal), onClick = onRecommend)
 
         SectionTitle(stringResource(R.string.settings_max_level))
-        SingleChoiceRow(stringResource(R.string.settings_max_level_2), s.maxLevel == 2) { vm.setMaxLevel(2) }
-        SingleChoiceRow(stringResource(R.string.settings_max_level_3), s.maxLevel == 3) { vm.setMaxLevel(3) }
+        InterventionLevels.maxLevelChoices.forEach { level ->
+            val label = level.maxLevelLabel ?: return@forEach
+            SingleChoiceRow(stringResource(label), s.maxLevel == level.number) { vm.setMaxLevel(level.number) }
+        }
 
         SectionTitle(stringResource(R.string.settings_ai))
         SwitchRow(stringResource(R.string.settings_ai_consent), s.aiConsent, onChange = vm::setAiConsent)

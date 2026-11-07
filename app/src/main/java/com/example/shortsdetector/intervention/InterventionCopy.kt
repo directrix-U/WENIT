@@ -27,16 +27,16 @@ class ResourceInterventionCopyProvider(private val context: Context) : Intervent
 
     override fun copyFor(input: InterventionCopyInput): InterventionCopy {
         val watch = ShortsNotifier.formatWatch(context, input.watchMs)
-        return when (input.level) {
-            1 -> InterventionCopy(
+        return when (InterventionLevels.of(input.level).kind) {
+            InterventionKind.NOTICE -> InterventionCopy(
                 when (val left = input.goalRemainingMinutes) {
                     null -> context.getString(R.string.popup_lv1_title, watch)
                     0 -> context.getString(R.string.popup_lv1_title_goal_reached, watch)
                     else -> context.getString(R.string.popup_lv1_title_goal, watch, left)
                 }
             )
-            2 -> InterventionCopy(context.getString(R.string.popup_lv2_title))
-            else -> InterventionCopy(
+            InterventionKind.QUESTION -> InterventionCopy(context.getString(R.string.popup_lv2_title))
+            InterventionKind.BREATHING -> InterventionCopy(
                 context.getString(R.string.popup_lv3_title),
                 context.getString(R.string.popup_lv3_body, watch)
             )
@@ -45,7 +45,8 @@ class ResourceInterventionCopyProvider(private val context: Context) : Intervent
 
     override fun levelChangeReason(from: Int, to: Int, policy: InterventionPolicy): String = when {
         to < from -> context.getString(R.string.level_down, policy.deescalateAfterStops)
-        to == 2 -> context.getString(R.string.level_up_to_2, policy.escalateAfterSkips)
+        InterventionLevels.of(from).escalation == EscalationRule.AFTER_SKIPS ->
+            context.getString(R.string.level_up_to_2, policy.escalateAfterSkips)
         else -> context.getString(R.string.level_up_to_3)
     }
 }
@@ -62,10 +63,10 @@ class AgentCopyProvider(
     override fun copyFor(input: InterventionCopyInput): InterventionCopy {
         val base = fixed.copyFor(input)
         val agent = messages() ?: return base
-        return when (input.level) {
-            1 -> agent.lv1Message?.let { InterventionCopy(it, base.title) } ?: base
-            2 -> agent.lv2Question?.let { InterventionCopy(it) } ?: base
-            else -> base
+        return when (InterventionLevels.of(input.level).kind) {
+            InterventionKind.NOTICE -> agent.lv1Message?.let { InterventionCopy(it, base.title) } ?: base
+            InterventionKind.QUESTION -> agent.lv2Question?.let { InterventionCopy(it) } ?: base
+            InterventionKind.BREATHING -> base
         }
     }
 }

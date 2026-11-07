@@ -46,7 +46,15 @@ data class SessionRecord(
     val isSeed: Boolean = false
 )
 
-enum class InterventionMethod { POPUP, NOTIFICATION, FAILED, SUPPRESSED_BY_COOLDOWN, SUPPRESSED_BY_DAILY_LIMIT }
+enum class InterventionMethod {
+    POPUP,
+    NOTIFICATION,
+    FAILED,
+    SUPPRESSED_BY_COOLDOWN,
+
+    /** 하루 상한을 없애기 전의 기록을 읽기 위해 남겨 둔다. 새로 쓰지 않는다. */
+    SUPPRESSED_BY_DAILY_LIMIT
+}
 
 enum class InterventionAction { OPEN_APP, DISMISS }
 
@@ -57,6 +65,18 @@ enum class InterventionOutcome {
     IGNORED,
     /** 이탈 신호로 앱이 오버레이를 닫았다. 사용자의 반응이 아니므로 단계 규칙과 멈춤 비율에 넣지 않는다. */
     INTERRUPTED
+}
+
+/** 스스로 멈춘 개입 뒤 어떻게 됐는가. 기다리는 중이면 null 이다. */
+enum class InterventionReturn {
+    /** 숏폼으로 돌아왔다 */
+    SHORTS,
+
+    /** 앱은 열었지만 숏폼은 보지 않았다 */
+    APP_ONLY,
+
+    /** 하루 동안 돌아오지 않았다 */
+    NONE
 }
 
 /** 사용자가 고른 이유. 정해진 선택지만 저장한다(자유 입력 없음). */
@@ -91,7 +111,13 @@ data class InterventionRecord(
     /** 시연 모드의 개입. 통계와 AI 입력에서 기본으로 뺀다. */
     val isDemo: Boolean = false,
     /** 발표용 시드 기록 */
-    val isSeed: Boolean = false
+    val isSeed: Boolean = false,
+    /** 스스로 멈춘 뒤 결과. 다른 결과이거나 아직 기다리는 중이면 null */
+    val returnStatus: InterventionReturn? = null,
+    /** 멈춘 뒤 다음 숏폼 세션까지 걸린 시간 */
+    val shortsReturnMs: Long? = null,
+    /** 멈춘 뒤 숏폼 없이 대상 앱을 처음 열기까지 걸린 시간 */
+    val appReturnMs: Long? = null
 )
 
 /** [RULE]: 사람이나 에이전트가 아니라 결정론적 단계 규칙이 바꿨다. */

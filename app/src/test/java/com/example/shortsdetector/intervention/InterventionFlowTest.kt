@@ -189,11 +189,9 @@ class InterventionFlowTest {
 
     private val tuning = DetectionTuning()
 
-    private fun engine(cooldownMs: Long = 30_000, maxDaily: Int = Int.MAX_VALUE, day: () -> Long = { 1L }) =
-        DetectionEngine(
-            tuning, listOf(YouTubeShortsAdapter(tuning)), cooldownMs,
-            watchThresholdMs = 30_000, maxDailyInterventions = maxDaily, currentDay = day
-        ).also { it.setEnabledPackages(setOf(YT), 0) }
+    private fun engine(cooldownMs: Long = 30_000) =
+        DetectionEngine(tuning, listOf(YouTubeShortsAdapter(tuning)), cooldownMs, watchThresholdMs = 30_000)
+            .also { it.setEnabledPackages(setOf(YT), 0) }
 
     /** 서비스처럼 개입이 나오면 게시 처리한다. */
     private fun DetectionEngine.frame(t: Long): EngineOutput =
@@ -212,106 +210,40 @@ class InterventionFlowTest {
     }
 
     @Test
-    fun `without a rearm a session is only judged once`() {
+    fun `without any answer a session repeats every cooldown of watching`() {
         val e = engine()
         e.enter(0)
-        assertEquals(1, e.watch(1_000, 600_000).count { it.notifySession != null })
+        assertEquals(19, e.watch(1_000, 600_000).count { it.notifySession != null })
     }
 
     @Test
-    fun `rearm fires once, five minutes of watching later`() {
+    fun `five more minutes is kept, then the cooldown takes over again`() {
         val e = engine()
         e.enter(0)
         val first = e.watch(1_000, 40_000).first { it.notifySession != null }
         val session = first.notifySession!!
         val at = e.sessionProgress()!!.estimatedWatchMs
-        e.rearmIntervention(session, at + ReinterventionRule.FIVE_MORE_MINUTES_MS)
+        e.delayIntervention(session, at + ReinterventionRule.FIVE_MORE_MINUTES_MS)
 
-        val outs = e.watch(41_000, 700_000)
-        val again = outs.filter { it.notifySession != null }
-        assertEquals(1, again.size)
-        val watched = again.single().notifyWatchMs!!
+        val again = e.watch(41_000, 400_000).filter { it.notifySession != null }
+        val watched = again.first().notifyWatchMs!!
         assertTrue(watched >= at + 300_000 && watched < at + 302_000)
+        assertTrue(again.size >= 2)
     }
 
     @Test
-    fun `rearm for another session is ignored`() {
+    fun `a promised delay for another session is ignored`() {
         val e = engine()
         e.enter(0)
         e.watch(1_000, 40_000)
-        e.rearmIntervention(99, 41_000)
-        assertEquals(0, e.watch(41_000, 100_000).count { it.notifySession != null })
-    }
-
-    @Test
-    fun `rearm obeys the cooldown and is then spent`() {
-        val e = engine(cooldownMs = 600_000)
-        e.enter(0)
-        val session = e.watch(1_000, 40_000).first { it.notifySession != null }.notifySession!!
-        e.rearmIntervention(session, 50_000)
-        val outs = e.watch(41_000, 200_000)
-        assertEquals(0, outs.count { it.notifySession != null })
-        assertEquals(1, outs.count { it.suppressedByCooldown })
-    }
-
-    @Test
-    fun `rearm obeys the daily limit`() {
-        val e = engine(maxDaily = 1)
-        e.enter(0)
-        val session = e.watch(1_000, 40_000).first { it.notifySession != null }.notifySession!!
-        e.rearmIntervention(session, 50_000)
-        val outs = e.watch(41_000, 200_000)
-        assertEquals(0, outs.count { it.notifySession != null })
-        assertEquals(1, outs.count { it.suppressedByDailyLimit })
-        assertFalse(outs.any { it.suppressedByCooldown })
-    }
-
-    // --- 하루 상한 ---
-
-    @Test
-    fun `daily limit suppresses the next session and a new day resets it`() {
-        var day = 1L
-        val e = engine(cooldownMs = 1_000, maxDaily = 1) { day }
-        e.enter(0)
-        e.watch(1_000, 40_000)
-        e.leave(41_000)
-
-        e.enter(60_000)
-        val second = e.watch(61_000, 100_000)
-        assertEquals(0, second.count { it.notifySession != null })
-        assertEquals(1, second.count { it.suppressedByDailyLimit })
-        e.leave(101_000)
-
-        day = 2L
-        e.enter(120_000)
-        assertEquals(1, e.watch(121_000, 160_000).count { it.notifySession != null })
-    }
-
-    @Test
-    fun `daily count restored after a restart still applies`() {
-        val e = engine(maxDaily = 2)
-        e.seedDailyInterventions(2)
-        e.enter(0)
-        val outs = e.watch(1_000, 40_000)
-        assertEquals(0, outs.count { it.notifySession != null })
-        assertEquals(1, outs.count { it.suppressedByDailyLimit })
-    }
-
-    @Test
-    fun `limit object counts per day and restoring never lowers the count`() {
-        val l = DailyInterventionLimit(2)
-        l.record(5)
-        l.record(5)
-        assertFalse(l.canIntervene(5))
-        l.seed(5, 1)
-        assertFalse(l.canIntervene(5))
-        assertTrue(l.canIntervene(6))
+        e.delayIntervention(99, 400_000)
+        assertEquals(1, e.watch(41_000, 80_000).count { it.notifySession != null })
     }
 
     @Test
     fun `policy changes reach an engine that is already running`() {
         val e = engine()
-        e.applyPolicy(60_000, 1_000, 5)
+        e.applyPolicy(60_000, 1_000)
         assertEquals(60_000, e.watchThresholdMs)
         e.enter(0)
         val first = e.watch(1_000, 70_000).first { it.notifySession != null }
@@ -322,7 +254,7 @@ class InterventionFlowTest {
 
     @Test
     fun `demo mode overlays fast values and does not touch the saved policy`() {
-        val saved = InterventionPolicy(thresholdMs = 600_000, cooldownMs = 120_000, escalateAfterSkips = 4, maxDailyInterventions = 7)
+        val saved = InterventionPolicy(thresholdMs = 600_000, cooldownMs = 120_000, escalateAfterSkips = 4)
         InterventionPolicyPreferences.write(prefs, saved)
         InterventionPolicyPreferences.writeDemoMode(prefs, true)
 
@@ -331,7 +263,6 @@ class InterventionFlowTest {
         assertEquals(10_000, r.thresholdMs)
         assertEquals(10_000, r.policy.cooldownMs)
         assertEquals(1, r.policy.escalateAfterSkips)
-        assertEquals(7, r.policy.maxDailyInterventions)
         assertEquals(saved, InterventionPolicyPreferences.read(prefs))
     }
 

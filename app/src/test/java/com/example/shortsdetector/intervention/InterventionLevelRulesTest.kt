@@ -90,7 +90,7 @@ class InterventionLevelRulesTest {
 
     @Test
     fun `only the level changes and same input gives same output`() {
-        val p = policy(1, skips = 1).copy(thresholdMs = 60_000, cooldownMs = 90_000, maxDailyInterventions = 4)
+        val p = policy(1, skips = 1).copy(thresholdMs = 60_000, cooldownMs = 90_000)
         val a = InterventionLevelRules.next(p, LevelStreaks(), IGNORED)
         assertEquals(p.copy(level = 2), a.policy)
         assertEquals(a, InterventionLevelRules.next(p, LevelStreaks(), IGNORED))

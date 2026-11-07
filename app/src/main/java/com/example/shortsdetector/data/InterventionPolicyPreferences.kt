@@ -27,9 +27,6 @@ object InterventionPolicyPreferences {
     private const val KEY_STOP_STREAK = "stop_streak"
     private const val KEY_DEMO_MODE = "demo_mode"
 
-    /** 값이 바뀌면 서비스가 하루 개입 카운터를 초기화한다. */
-    const val KEY_RECORDS_CLEARED_AT = "records_cleared_at"
-    private const val KEY_DEMO_RUN_ID = "demo_run_id"
     private const val KEY_DEMO_THRESHOLD_MS = "demo_threshold_ms"
     private const val KEY_DEMO_LEVEL = "demo_level"
     private const val KEY_DEMO_SKIP_STREAK = "demo_skip_streak"
@@ -85,22 +82,16 @@ object InterventionPolicyPreferences {
 
     internal fun writeDemoThresholdMs(p: SharedPreferences, ms: Long) = p.edit { putLong(KEY_DEMO_THRESHOLD_MS, ms) }
 
-    /** 기록 전체 삭제를 서비스에 알린다. 어느 스레드에서 불러도 된다. */
-    fun markRecordsCleared(context: Context) = writeRecordsCleared(prefs(context), System.currentTimeMillis())
-
-    internal fun writeRecordsCleared(p: SharedPreferences, nowMs: Long) =
-        p.edit { putLong(KEY_RECORDS_CLEARED_AT, nowMs) }
-
     /**
      * 시연 준비 초기화: 정책 전체를 시연 시작값(기본 정책)으로, 연속 횟수와 시연 단계를 처음으로 되돌린다.
      * @return 초기화 전 정책
      */
     fun resetForDemo(context: Context): InterventionPolicy {
         migrate(context)
-        return resetForDemo(prefs(context), System.currentTimeMillis())
+        return resetForDemo(prefs(context))
     }
 
-    internal fun resetForDemo(p: SharedPreferences, nowMs: Long): InterventionPolicy {
+    internal fun resetForDemo(p: SharedPreferences): InterventionPolicy {
         val before = read(p)
         write(p, InterventionPolicy())
         p.edit {
@@ -109,14 +100,12 @@ object InterventionPolicyPreferences {
             remove(KEY_DEMO_LEVEL)
             remove(KEY_DEMO_SKIP_STREAK)
             remove(KEY_DEMO_STOP_STREAK)
-            putLong(KEY_RECORDS_CLEARED_AT, nowMs)
         }
         return before
     }
 
     /**
-     * 시드를 지울 때: 정책을 기본값으로, 연속 횟수를 처음으로 되돌린다. 실제 기록은 그대로이므로
-     * [resetForDemo] 와 달리 서비스의 하루 개입 수는 초기화하지 않는다.
+     * 시드를 지울 때: 정책을 기본값으로, 연속 횟수를 처음으로 되돌린다.
      * @return 초기화 전 정책
      */
     internal fun resetToDefault(p: SharedPreferences): InterventionPolicy {
@@ -157,13 +146,12 @@ object InterventionPolicyPreferences {
         val saved = read(p)
         if (!p.getBoolean(KEY_DEMO_MODE, false)) return ResolvedPolicy(saved, saved.effectiveThresholdMs(goals), false)
         val demo = DemoMode.overlay(saved, p.getInt(KEY_DEMO_LEVEL, InterventionPolicyBounds.MIN_LEVEL), readDemoThresholdMs(p))
-        return ResolvedPolicy(demo, demo.thresholdMs, true, p.getLong(KEY_DEMO_RUN_ID, 0L))
+        return ResolvedPolicy(demo, demo.thresholdMs, true)
     }
 
-    /** 켤 때마다 시연용 단계를 Lv.1 부터, 시연 전용 하루 카운터를 0 부터 다시 시작한다. */
-    internal fun writeDemoMode(p: SharedPreferences, enabled: Boolean, nowMs: Long = System.currentTimeMillis()) = p.edit {
+    /** 켤 때마다 시연용 단계를 Lv.1 부터 다시 시작한다. */
+    internal fun writeDemoMode(p: SharedPreferences, enabled: Boolean) = p.edit {
         putBoolean(KEY_DEMO_MODE, enabled)
-        if (enabled) putLong(KEY_DEMO_RUN_ID, nowMs) else remove(KEY_DEMO_RUN_ID)
         remove(KEY_DEMO_LEVEL)
         remove(KEY_DEMO_SKIP_STREAK)
         remove(KEY_DEMO_STOP_STREAK)

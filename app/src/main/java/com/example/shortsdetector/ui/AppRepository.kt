@@ -37,6 +37,7 @@ import com.example.shortsdetector.data.stats.SavedTimeBaselinePreferences
 import com.example.shortsdetector.data.stats.SavedTimeCalculator
 import com.example.shortsdetector.data.stats.UsageStatsCalculator
 import com.example.shortsdetector.data.usage.DemoSeedData
+import com.example.shortsdetector.data.usage.ReturnTracker
 import com.example.shortsdetector.data.usage.InterventionAction
 import com.example.shortsdetector.data.usage.InterventionOutcome
 import com.example.shortsdetector.data.usage.InterventionRecord
@@ -199,6 +200,7 @@ class AndroidAppRepository(context: Context) : AppRepository {
     )
 
     private fun input(profile: UserProfile?): AgentInput {
+        ReturnTracker(db).sweep(nowMs())
         val window = UsageStatsCalculator.dataWindow(nowMs(), zone())
         return AgentInputBuilder.build(
             profile, goals(), savedPolicy(),
@@ -268,7 +270,6 @@ class AndroidAppRepository(context: Context) : AppRepository {
     override fun deleteAllRecords() {
         db.deleteAll()
         SavedTimeBaselinePreferences.clear(app)
-        InterventionPolicyPreferences.markRecordsCleared(app)
     }
 
     /** 정책 전체를 시연 시작값으로 되돌린다. 기록을 지운 뒤에 남기는 DEFAULT 한 건이 첫 변경 이력이 된다. */

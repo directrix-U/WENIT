@@ -3,6 +3,7 @@ package com.example.shortsdetector.ai
 import com.example.shortsdetector.data.goal.Goal
 import com.example.shortsdetector.data.goal.GoalType
 import com.example.shortsdetector.data.stats.AgentInput
+import com.example.shortsdetector.data.stats.InterventionBehavior
 import com.example.shortsdetector.data.stats.RecentUsageStats
 import org.json.JSONArray
 import org.json.JSONObject
@@ -36,7 +37,6 @@ object AgentInputJson {
                 .put("thresholdMs", input.policy.thresholdMs)
                 .put("level", input.policy.level)
                 .put("cooldownMs", input.policy.cooldownMs)
-                .put("maxDailyInterventions", input.policy.maxDailyInterventions)
                 .put("maxLevel", input.policy.maxLevel)
                 .put(
                     "perSessionGoalMinutes",
@@ -52,6 +52,7 @@ object AgentInputJson {
             }
         )
         root.put("recent", recent(input.recent))
+        root.put("behavior", behavior(input.recent.behavior))
         root.put(
             "recentPolicyChanges",
             JSONArray().apply {
@@ -116,6 +117,76 @@ object AgentInputJson {
             "lv2Reasons",
             JSONObject().apply { r.lv2Reasons.forEach { put(it.reason.name, it.count) } }
         )
+
+    /** 집계값만 보낸다. 표본이 적은 항목은 값 대신 상태만 남겨 AI 가 과하게 해석하지 않게 한다. */
+    private fun behavior(b: InterventionBehavior) = JSONObject()
+        .put("minSamples", InterventionBehavior.MIN_SAMPLES)
+        .put(
+            "levelRates",
+            JSONArray().apply {
+                b.levelRates.forEach {
+                    put(
+                        sampled(it.samples)
+                            .put("level", it.level)
+                            .putRate("stopRate", it.stopRate)
+                            .putRate("continueRate", it.continueRate)
+                    )
+                }
+            }
+        )
+        .put(
+            "returnAfterStop",
+            b.returns.let {
+                sampled(it.samples)
+                    .putRate("within10MinRate", it.within10MinRate)
+                    .putRate("within30MinRate", it.within30MinRate)
+                    .apply { it.medianReturnMs?.let { ms -> put("medianReturnMs", ms) } }
+                    .apply {
+                        if (it.enough) {
+                            put("appOnly", it.appOnly)
+                            put("notReturned", it.notReturned)
+                        }
+                    }
+            }
+        )
+        .put("lv2Unanswered", b.lv2Unanswered)
+        .put(
+            "lv2ReasonsByTimeSlot",
+            JSONObject().apply {
+                b.lv2ReasonsBySlot.forEach { s ->
+                    put(
+                        s.slot.name,
+                        sampled(s.samples).apply {
+                            if (s.enough) s.reasons.forEach { put(it.reason.name, it.count) }
+                        }
+                    )
+                }
+            }
+        )
+        .put(
+            "continuedByTimeSlot",
+            JSONObject().apply {
+                b.continuedBySlot.forEach { s ->
+                    put(
+                        s.slot.name,
+                        sampled(s.samples).apply {
+                            if (s.enough) s.levels.forEach { (level, n) -> put("level$level", n) }
+                        }
+                    )
+                }
+            }
+        )
+
+    private fun sampled(samples: Int) = JSONObject()
+        .put("samples", samples)
+        .put("status", if (samples >= InterventionBehavior.MIN_SAMPLES) "OK" else "INSUFFICIENT_DATA")
+
+    private fun JSONObject.putRate(key: String, rate: Double?): JSONObject {
+        if (rate != null) put(key, Math.round(rate * RATE_SCALE) / RATE_SCALE)
+        return this
+    }
+
+    private const val RATE_SCALE = 100.0
 
     private fun goal(g: Goal) = JSONObject().put("type", g.type.name).put("value", g.value)
 

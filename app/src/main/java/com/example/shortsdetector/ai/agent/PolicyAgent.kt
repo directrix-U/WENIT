@@ -9,6 +9,7 @@ import com.example.shortsdetector.data.usage.PolicyChangeRecord
 import com.example.shortsdetector.data.usage.PolicyChangeSource
 import com.example.shortsdetector.data.usage.PolicyChangeStatus
 import com.example.shortsdetector.data.usage.UsageStore
+import com.example.shortsdetector.intervention.InterventionLevels
 import com.example.shortsdetector.intervention.InterventionPolicy
 import org.json.JSONArray
 import org.json.JSONException
@@ -151,7 +152,6 @@ class PolicyAgent(
                 keep = it,
                 thresholdSec = whole(json, "thresholdSec"),
                 cooldownSec = whole(json, "cooldownSec"),
-                dailyMax = whole(json, "dailyMax"),
                 startLevel = whole(json, "startLevel"),
                 reason = json.getString("reason"),
                 lv1Message = json.getString("lv1Message"),
@@ -170,6 +170,7 @@ class PolicyAgent(
 
     companion object {
         const val MIN_INTERVENTIONS = 3
+        private val LEVELS = InterventionLevels.ALL.joinToString(", ") { it.description }
         private const val REVERT_LOOKBACK = 50
         private const val FALLBACK_REASON = "최근 반응을 보고 조금 조정했어요"
 
@@ -181,7 +182,6 @@ class PolicyAgent(
                     .put("decision", JSONObject().put("type", "string").put("enum", JSONArray(listOf("KEEP", "CHANGE"))))
                     .put("thresholdSec", JSONObject().put("type", "integer"))
                     .put("cooldownSec", JSONObject().put("type", "integer"))
-                    .put("dailyMax", JSONObject().put("type", "integer"))
                     .put("startLevel", JSONObject().put("type", "integer"))
                     .put("reason", JSONObject().put("type", "string"))
                     .put("lv1Message", JSONObject().put("type", "string"))
@@ -191,7 +191,7 @@ class PolicyAgent(
                 "required",
                 JSONArray(
                     listOf(
-                        "decision", "thresholdSec", "cooldownSec", "dailyMax", "startLevel",
+                        "decision", "thresholdSec", "cooldownSec", "startLevel",
                         "reason", "lv1Message", "lv2Question"
                     )
                 )
@@ -202,28 +202,35 @@ class PolicyAgent(
             당신은 숏폼 시청을 스스로 조절하려는 사람을 돕는 앱의 개입 정책을 조절합니다.
             사용자가 알림에 어떻게 반응했는지를 보고, 다음 개입을 어떻게 할지 정합니다.
 
-            개입 단계는 Lv.1 가벼운 알림, Lv.2 이유를 묻는 질문, Lv.3 10초 숨 고르기입니다.
+            개입 단계는 $LEVELS 입니다. 사용자가 계속 보면 쿨다운(cooldownSec)마다 다시 개입하고, 개입 빈도는 이 값으로만 조절합니다.
             levelOutcomes 의 stopped 는 스스로 멈춤, continued 는 계속 보기를 고름, ignored 는 반응 없이 넘김입니다.
 
             판단 기준:
             - 넘김(continued, ignored)이 많으면 startLevel 을 올리고 thresholdSec 을 줄입니다.
             - 잘 멈추면(stopped 가 많으면) startLevel 을 내리고 thresholdSec 을 늘려 완화합니다.
-            - 짧은 시간에 개입이 많거나 피로 신호가 있으면 dailyMax 를 줄입니다.
+            - 짧은 시간에 개입이 많거나 피로 신호가 있으면 cooldownSec 을 늘립니다.
             - 근거가 약하면 큰 변화를 주지 말고 decision 을 KEEP 으로 합니다.
 
             값의 범위:
             - thresholdSec: 30~600, 현재 값의 ±50% 이내
             - cooldownSec: 30~600
-            - dailyMax: 3~10, 현재 값의 ±3 이내
             - startLevel: 1~maxLevel, 현재 단계의 ±1 이내
             - decision 이 KEEP 이어도 모든 필드를 현재 값 기준으로 채웁니다.
             - policy.perSessionGoalMinutes 는 사용자가 정한 한 번 시청 목표입니다. 실제 기준은 thresholdSec 와 이 값 중 작은 쪽입니다.
+
+            행동 지표(behavior):
+            - status 가 INSUFFICIENT_DATA 인 항목은 표본이 적습니다. 판단 근거로 쓰지 않습니다.
+            - levelRates 는 단계별 멈춤률·계속 보기율입니다. 계속 보기율이 높은 단계는 효과가 약하다고 봅니다.
+            - returnAfterStop 의 within10MinRate 가 높거나 medianReturnMs 가 짧으면 멈춰도 금방 돌아옵니다. 멈춘 횟수만 보고 완화하지 말고 시작 단계를 유지하거나 올립니다.
+            - returnAfterStop 에서 notReturned 가 많고 재방문이 드물면 개입이 잘 듣고 있습니다. 완화해도 됩니다.
+            - lv2ReasonsByTimeSlot 은 시간대별 이유입니다. 많은 이유가 있는 시간대를 lv2Question 에 반영합니다.
 
             문구:
             - reason 은 실제 숫자를 근거로 한 문장, 40자 이내, 사용자에게 보여 줍니다. 예: "7일간 알림 12번 중 10번 넘겨서 조금 일찍 알려요"
             - lv1Message 는 30자 이내의 가벼운 알림 문구입니다. 이 사용자가 주로 보는 시간대(watchMsByTimeSlot)와 넘김 비율을 반영해 씁니다.
             - lv2Question 은 30자 이내의 질문입니다. lv2Reasons 에서 가장 많은 이유와 시간대를 반영해 씁니다.
             - 두 문구는 이 사용자의 데이터에서 나온 내용이어야 합니다. 누구에게나 맞는 일반적인 문장이나 이 안내문의 문장을 그대로 쓰지 않습니다.
+            - lv1, returnAfterStop 같은 필드 이름이나 내부 용어는 쓰지 않습니다. 틀림: "lv1 은 자주 넘겨서" → 맞음: "알림을 자주 넘겨서"
             - 모두 "~해요" 체로 쓰고, 높임말(~시다, ~셔서, ~신다)은 쓰지 않습니다. 틀림: "자주 넘기셔서" → 맞음: "자주 넘겨서"
             - 비난하거나 죄책감을 주지 않습니다. 의학적·심리학적 진단이나 건강 효과를 말하지 않습니다.
         """.trimIndent()

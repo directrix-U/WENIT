@@ -298,7 +298,7 @@ class AiGoalRecommenderTest {
 
         val json = AgentInputJson.toJson(i)
         assertEquals(
-            setOf("survey", "currentGoals", "policy", "goalProgress", "recent", "recentPolicyChanges", "today", "week"),
+            setOf("survey", "currentGoals", "policy", "goalProgress", "recent", "behavior", "recentPolicyChanges", "today", "week"),
             json.keys().asSequence().toSet()
         )
         assertEquals(300_000, json.getJSONObject("today").getLong("estimatedWatchMs"))  // 시연 세션 제외

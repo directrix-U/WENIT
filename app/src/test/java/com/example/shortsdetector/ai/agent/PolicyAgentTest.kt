@@ -67,20 +67,19 @@ class PolicyAgentTest {
     private var ids = 0
     private var ticks = 0L
 
-    private val base = InterventionPolicy(thresholdMs = 180_000, cooldownMs = 60_000, maxDailyInterventions = 6, level = 2)
+    private val base = InterventionPolicy(thresholdMs = 180_000, cooldownMs = 60_000, level = 2)
 
     private fun decision(
         decision: String = "CHANGE",
         thresholdSec: Int = 120,
         cooldownSec: Int = 90,
-        dailyMax: Int = 5,
         startLevel: Int = 3,
         reason: String = "알림을 많이 넘겨서 일찍 알려요",
         lv1: String = "잠깐, 계속 볼까요?",
         lv2: String = "지금 왜 보고 있어요?"
     ) = JSONObject()
         .put("decision", decision).put("thresholdSec", thresholdSec).put("cooldownSec", cooldownSec)
-        .put("dailyMax", dailyMax).put("startLevel", startLevel).put("reason", reason)
+        .put("startLevel", startLevel).put("reason", reason)
         .put("lv1Message", lv1).put("lv2Question", lv2)
 
     private fun respond(json: JSONObject, stop: String = "end_turn") = respondText(json.toString(), stop)
@@ -120,7 +119,6 @@ class PolicyAgentTest {
         val p = saved()
         assertEquals(120_000, p.thresholdMs)
         assertEquals(90_000, p.cooldownMs)
-        assertEquals(5, p.maxDailyInterventions)
         assertEquals(3, p.level)
 
         val change = store.recentPolicyChanges(1).single()
@@ -135,7 +133,7 @@ class PolicyAgentTest {
 
     @Test
     fun `KEEP changes nothing, not even the messages`() {
-        respond(decision("KEEP", thresholdSec = 30, dailyMax = 3))
+        respond(decision("KEEP", thresholdSec = 30))
         val r = agent().run(input())
         assertEquals(AgentRunStatus.KEPT, r.status)
         assertEquals(base, saved())
@@ -145,7 +143,7 @@ class PolicyAgentTest {
 
     @Test
     fun `CHANGE that clips back to the same policy records nothing`() {
-        respond(decision(thresholdSec = 180, cooldownSec = 60, dailyMax = 6, startLevel = 2))
+        respond(decision(thresholdSec = 180, cooldownSec = 60, startLevel = 2))
         val r = agent().run(input())
         assertEquals(AgentRunStatus.KEPT, r.status)
         assertTrue(store.recentPolicyChanges(5).isEmpty())
@@ -153,8 +151,8 @@ class PolicyAgentTest {
 
     // --- 범위와 변경 폭 ---
 
-    private fun proposal(thresholdSec: Int = 180, cooldownSec: Int = 60, dailyMax: Int = 6, startLevel: Int = 2) =
-        AgentProposal(false, thresholdSec, cooldownSec, dailyMax, startLevel, "r", "a", "b")
+    private fun proposal(thresholdSec: Int = 180, cooldownSec: Int = 60, startLevel: Int = 2) =
+        AgentProposal(false, thresholdSec, cooldownSec, startLevel, "r", "a", "b")
 
     @Test
     fun `threshold moves at most 50 percent in one run`() {
@@ -163,24 +161,29 @@ class PolicyAgentTest {
     }
 
     @Test
-    fun `level moves one step and daily max three`() {
-        val p = base.copy(level = 1, maxDailyInterventions = 10)
-        val out = AgentPolicyRules.apply(p, proposal(startLevel = 3, dailyMax = 3))
+    fun `level moves one step`() {
+        val out = AgentPolicyRules.apply(base.copy(level = 1), proposal(startLevel = 3))
         assertEquals(2, out.level)
-        assertEquals(7, out.maxDailyInterventions)
+    }
+
+    @Test
+    fun `the agent no longer sees or sets a daily maximum`() {
+        val required = PolicyAgent.SCHEMA.getJSONArray("required").toString()
+        assertFalse("dailyMax" in required)
+        assertFalse("dailyMax" in PolicyAgent.SCHEMA.getJSONObject("properties").toString())
+        assertFalse("dailyMax" in PolicyAgent.SYSTEM_PROMPT)
+        assertFalse("maxDailyInterventions" in AgentInputJson.toJson(input()).toString())
     }
 
     @Test
     fun `agent range is stricter than the app range`() {
-        val p = InterventionPolicy(thresholdMs = 500_000, cooldownMs = 60_000, maxDailyInterventions = 9)
-        val out = AgentPolicyRules.apply(p, proposal(thresholdSec = 100_000, cooldownSec = 100_000, dailyMax = 100))
+        val p = InterventionPolicy(thresholdMs = 500_000, cooldownMs = 60_000)
+        val out = AgentPolicyRules.apply(p, proposal(thresholdSec = 100_000, cooldownSec = 100_000))
         assertEquals(600_000, out.thresholdMs)
         assertEquals(600_000, out.cooldownMs)
-        assertEquals(10, out.maxDailyInterventions)
 
-        val low = AgentPolicyRules.apply(p.copy(maxDailyInterventions = 4), proposal(thresholdSec = 1, cooldownSec = 1, dailyMax = 0))
+        val low = AgentPolicyRules.apply(p, proposal(thresholdSec = 1, cooldownSec = 1))
         assertEquals(30_000, low.cooldownMs)
-        assertEquals(3, low.maxDailyInterventions)
     }
 
     @Test
@@ -255,7 +258,7 @@ class PolicyAgentTest {
             JSONObject(decision().toString()).apply { remove("cooldownSec") },
             decision("MAYBE"),
             JSONObject(decision().toString()).put("thresholdSec", "120"),
-            JSONObject(decision().toString()).put("dailyMax", 4.5),
+            JSONObject(decision().toString()).put("cooldownSec", 4.5),
             JSONObject(decision().toString()).apply { remove("reason") },
             JSONObject().put("goals", JSONArray())
         )
@@ -360,6 +363,19 @@ class PolicyAgentTest {
         assertTrue(undo!!.isSeed)
         store.deleteSeedPolicyChanges()
         assertTrue(store.recentPolicyChanges(10).isEmpty())
+    }
+
+    @Test
+    fun `internal names never reach the user, the fixed text is used instead`() {
+        for (bad in listOf("lv1 은 자주 넘겨서 올려요", "Lv.2 를 유지해요", "LV 3 으로 올려요", "returnAfterStop 이 높아요")) {
+            assertNull(bad, AgentText.clean(bad, AgentText.MAX_REASON_LENGTH))
+        }
+        assertEquals("알림을 자주 넘겨서 2단계로 올려요", AgentText.clean("알림을 자주 넘겨서 2단계로 올려요", 40))
+
+        respond(decision(reason = "lv1 은 넘겨서 올려요", lv1 = "lv1 문구"))
+        agent().run(input())
+        assertEquals("최근 반응을 보고 조금 조정했어요", store.recentPolicyChanges(1).single().reasonText)
+        assertNull(AgentPreferences.activeMessages(agentPrefs)?.lv1Message)
     }
 
     // --- 되돌리기 ---
@@ -494,7 +510,7 @@ class PolicyAgentTest {
     @Test
     fun `system prompt states the limits and tone`() {
         val p = PolicyAgent.SYSTEM_PROMPT
-        for (word in listOf("30~600", "3~10", "±50%", "±3", "±1", "~해요", "높임말", "KEEP")) assertTrue(word, word in p)
+        for (word in listOf("30~600", "±50%", "±1", "~해요", "높임말", "KEEP", "INSUFFICIENT_DATA", "returnAfterStop")) assertTrue(word, word in p)
     }
 
     @Test
@@ -517,7 +533,7 @@ class PolicyAgentTest {
         assertTrue(night > r.timeSlots.sumOf { it.watchMs } / 2)
         val skipped = r.levelOutcomes.sumOf { it.continued + it.ignored }
         val stopped = r.levelOutcomes.sumOf { it.stopped }
-        assertTrue(skipped > stopped * 4)
+        assertTrue(skipped > stopped * 2)
         assertEquals(7, r.days.count { it.watchMs > 0 })
     }
 
@@ -570,7 +586,7 @@ class PolicyAgentTest {
 
     @Test
     fun `migration 4 to 5 only adds columns`() {
-        assertEquals(6, UsageSchema.VERSION)
+        assertEquals(7, UsageSchema.VERSION)
         assertTrue(UsageSchema.MIGRATE_5_TO_6.single().let { it.startsWith("ALTER TABLE policy_changes") && "ADD COLUMN is_seed" in it })
         assertTrue(UsageSchema.MIGRATE_4_TO_5.all { it.startsWith("ALTER TABLE") && "ADD COLUMN is_seed" in it })
     }
